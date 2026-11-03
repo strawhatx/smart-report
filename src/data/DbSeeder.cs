@@ -47,6 +47,14 @@ public static class DbSeeder
 
     public static async Task SeedAsync(SmartReportDbContext db, CancellationToken cancellationToken = default)
     {
+        // Each block checks for itself rather than one early return for the whole method, so a
+        // database seeded before a block existed still picks it up on the next start.
+        if (!await db.SavedReports.AnyAsync(cancellationToken))
+        {
+            db.SavedReports.AddRange(BuildSavedReports());
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         if (await db.Regions.AnyAsync(cancellationToken))
         {
             return;
@@ -193,6 +201,49 @@ public static class DbSeeder
         new() { Name = "Graduate Intake", FiscalYear = 2026, BudgetAmount = 96_500m, SpendAmount = 91_200m },
         new() { Name = "Wellbeing", FiscalYear = 2026, BudgetAmount = 64_000m, SpendAmount = 38_900m },
     ];
+
+    /// <summary>
+    /// A few reports per person so the gallery isn't empty.
+    ///
+    /// <para>
+    /// These are owned rows: the policy on <c>saved_reports</c> is owner-only, so each principal
+    /// sees their own three and nobody else's. The gallery demonstrates that without saying so.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<SavedReport> BuildSavedReports()
+    {
+        (string Owner, string Title, string Question)[] reports =
+        [
+            (DemoPrincipals.Analyst, "Revenue by region", "revenue by region, last quarter"),
+            (DemoPrincipals.Analyst, "Revenue over time", "revenue by month"),
+            (DemoPrincipals.Analyst, "What sells", "revenue by product category"),
+            (DemoPrincipals.RegionalManager, "My region's revenue", "revenue by region, last quarter"),
+            (DemoPrincipals.RegionalManager, "Headcount", "headcount by department"),
+            (DemoPrincipals.RegionalManager, "Why people leave", "attrition by reason"),
+            (DemoPrincipals.HrDirector, "D&I feasibility", "turnover cost vs the D&I program budget"),
+            (DemoPrincipals.HrDirector, "Pay by department", "average salary by department"),
+            (DemoPrincipals.HrDirector, "Why people leave", "attrition by reason"),
+        ];
+
+        var created = new DateTime(2026, 10, 28, 9, 30, 0, DateTimeKind.Utc);
+
+        foreach (var (owner, title, question) in reports)
+        {
+            created = created.AddMinutes(37);
+            yield return new SavedReport
+            {
+                Id = Guid.NewGuid(),
+                OwnerKey = owner,
+                Title = title,
+                Question = question,
+                // The spec is re-planned on open rather than replayed, so this is a record of
+                // what was asked, not a cached answer that could silently go stale.
+                SpecJson = "{}",
+                CreatedAt = created,
+                UpdatedAt = created,
+            };
+        }
+    }
 
     private static List<Customer> BuildCustomers(Random random, Region[] regions)
     {
