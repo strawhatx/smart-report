@@ -1,0 +1,70 @@
+@page "/reports"
+@model SmartReport.App.Pages.Reports.IndexModel
+@{
+    ViewData["Title"] = "Reports";
+    ViewData["PageKey"] = "reports";
+}
+
+@section Head { <link rel="stylesheet" href="~/css/reports.css" /> }
+
+<div class="shell gallery">
+    <header class="gallery__head">
+        <div>
+            <p class="label"><span class="label__index">[R]</span> Workspace</p>
+            <h1 class="gallery__title">Reports</h1>
+            <p class="gallery__sub">
+                @if (Model.Principal is null)
+                {
+                    <text>Sign in from the development banner above to see your reports.</text>
+                }
+                else
+                {
+                    <text>
+                        Yours, @Model.Principal.DisplayName. These rows are filtered by Postgres,
+                        not by this page — the policy on <code>saved_reports</code> is owner-only.
+                    </text>
+                }
+            </p>
+        </div>
+        <a class="btn" href="/reports/new" data-magnetic>Ask something new <span class="btn__arrow">→</span></a>
+    </header>
+
+    @if (Model.Principal is null)
+    {
+        <p class="gallery__empty">Not signed in.</p>
+    }
+    else if (Model.Reports.Count == 0)
+    {
+        <p class="gallery__empty">Nothing saved yet.</p>
+    }
+    else
+    {
+        <ul class="gallery__grid">
+            @foreach (var report in Model.Reports)
+            {
+                <li class="report-card">
+                    <a class="report-card__link" href="/reports/@report.Id">
+                        <span class="report-card__preview" aria-hidden="true">
+                            <span class="report-card__bars">
+                                @for (var i = 0; i < 5; i++)
+                                {
+                                    <span style="--h:@(28 + (report.Title.Length * (i + 3) % 62))%"></span>
+                                }
+                            </span>
+                        </span>
+                        <span class="report-card__body">
+                            <span class="report-card__title">@report.Title</span>
+                            <code class="report-card__question">@report.Question</code>
+                            <span class="label">@report.UpdatedAt.ToString("d MMM yyyy") · @Model.Principal.DisplayName</span>
+                        </span>
+                    </a>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@section Scripts {
+    <script src="~/lib/gsap/gsap.min.js" defer></script>
+    <script type="module" src="~/js/reports/gallery.js"></script>
+}

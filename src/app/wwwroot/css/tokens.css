@@ -1,0 +1,94 @@
+/*
+  Smart Report — design tokens.
+
+  "Query Plan": an engineering drawing. Near-monochrome ink on paper, hairline rules, mono
+  labels with bracketed indices, and exactly one signal colour (amber) that means "the system is
+  doing something". Red is reserved — it only ever marks something the viewer may not have.
+
+  Typography uses system stacks on purpose. Self-hosting webfonts would add six binaries and a
+  render-blocking fetch for a demo whose whole point is how fast it answers; the system grotesk
+  on every target platform is good enough to carry the look.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  /* --- Surface */
+  --paper:        #F2F1EC;
+  --paper-raised: #FAFAF7;
+  --paper-sunk:   #E8E7E0;
+  --ink:          #0B0D0E;
+  --ink-soft:     #434748;
+  --ink-faint:    #7A7F80;
+
+  /* --- One signal colour, one warning colour. Nothing else is coloured. */
+  --signal:       #B06E12;
+  --signal-bright:#D98B1F;
+  --signal-wash:  rgba(176, 110, 18, 0.10);
+  --strike:       #A62F24;
+  --strike-wash:  rgba(166, 47, 36, 0.09);
+  --allow:        #2F6B4F;
+
+  /* --- Hairlines. The drawing is made of these. */
+  --rule:         rgba(11, 13, 14, 0.16);
+  --rule-strong:  rgba(11, 13, 14, 0.38);
+  --rule-faint:   rgba(11, 13, 14, 0.07);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", "Roboto Mono", Menlo, monospace;
+
+  /* --- Spacing: a 4px grid, named by use rather than size. */
+  --gutter: 24px;
+  --measure: 68ch;
+  --max-width: 1280px;
+
+  /* --- One easing system (see docs/motion.md). */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 240ms;
+  --dur-reveal: 600ms;
+
+  --radius: 2px; /* Drawings don't have rounded corners. */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:        #0B0D0E;
+    --paper-raised: #141718;
+    --paper-sunk:   #060708;
+    --ink:          #ECEAE3;
+    --ink-soft:     #A8ACAD;
+    --ink-faint:    #6E7374;
+
+    --signal:       #E0A040;
+    --signal-bright:#F2B758;
+    --signal-wash:  rgba(224, 160, 64, 0.12);
+    --strike:       #E0675A;
+    --strike-wash:  rgba(224, 103, 90, 0.12);
+    --allow:        #6FBF95;
+
+    --rule:         rgba(236, 234, 227, 0.18);
+    --rule-strong:  rgba(236, 234, 227, 0.42);
+    --rule-faint:   rgba(236, 234, 227, 0.08);
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper:        #0B0D0E;
+  --paper-raised: #141718;
+  --paper-sunk:   #060708;
+  --ink:          #ECEAE3;
+  --ink-soft:     #A8ACAD;
+  --ink-faint:    #6E7374;
+
+  --signal:       #E0A040;
+  --signal-bright:#F2B758;
+  --signal-wash:  rgba(224, 160, 64, 0.12);
+  --strike:       #E0675A;
+  --strike-wash:  rgba(224, 103, 90, 0.12);
+  --allow:        #6FBF95;
+
+  --rule:         rgba(236, 234, 227, 0.18);
+  --rule-strong:  rgba(236, 234, 227, 0.42);
+  --rule-faint:   rgba(236, 234, 227, 0.08);
+}

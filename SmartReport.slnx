@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/ai/">
+    <Project Path="src/ai/SmartReport.Ai.csproj" />
+  </Folder>
+  <Folder Name="/src/app/">
+    <Project Path="src/app/SmartReport.App.csproj" />
+  </Folder>
+  <Folder Name="/src/core/">
+    <Project Path="src/core/SmartReport.Core.csproj" />
+  </Folder>
+  <Folder Name="/src/data/">
+    <Project Path="src/data/SmartReport.Data.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SmartReport.Tests.csproj" />
+  </Folder>
+</Solution>

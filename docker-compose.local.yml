@@ -1,0 +1,29 @@
+# Local PostgreSQL for the Smart Report demo.
+# Credentials come from .env (git-ignored) — see .env.example. Nothing here is a committed secret (C2).
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: smartreport-postgres
+    restart: unless-stopped
+    environment:
+      # Owner / superuser. Used ONLY by migrations and the seeder (D4).
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      # Non-owner application role. RLS applies to this one (A6).
+      APP_DB_USER: ${APP_DB_USER:?set APP_DB_USER in .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+    ports:
+      # Bound to loopback only — this database is never reachable off the machine.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - smartreport-pgdata:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  smartreport-pgdata:

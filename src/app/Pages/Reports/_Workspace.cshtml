@@ -1,0 +1,44 @@
+@model SmartReport.App.Pages.Reports.WorkspaceModel
+
+<div class="workspace" data-question="@Model.Question">
+    @* ── Left: the conversation. Everything the pipeline decides lands here, in order. ── *@
+    <aside class="rail" aria-label="Conversation">
+        <header class="rail__head">
+            <p class="label"><span class="label__index">[?]</span> Conversation</p>
+            <h1 class="rail__title">@Model.Title</h1>
+        </header>
+
+        <ol class="stream" id="stream" aria-live="polite" aria-relevant="additions"></ol>
+
+        <form class="ask" id="ask-form" autocomplete="off">
+            <label class="label" for="ask-input">Ask</label>
+            <div class="ask__row">
+                <textarea id="ask-input" name="question" rows="2" maxlength="500"
+                          placeholder="revenue by region, last quarter"
+                          aria-describedby="ask-hint">@Model.Question</textarea>
+                <button type="submit" class="btn btn--small" id="ask-submit">Ask <span class="btn__arrow">→</span></button>
+            </div>
+            <p class="ask__hint" id="ask-hint">
+                Try: revenue by region · headcount by department · attrition by reason ·
+                turnover cost vs the D&amp;I program budget · average salary by department
+            </p>
+        </form>
+    </aside>
+
+    @* ── Right: the report. Empty until something is asked. ── *@
+    <section class="canvas" aria-label="Report">
+        <header class="canvas__head">
+            <p class="label" id="canvas-label">No report yet</p>
+            <div class="canvas__actions">
+                <button type="button" class="btn btn--ghost btn--small" id="export-csv" disabled>Export CSV</button>
+            </div>
+        </header>
+
+        <div class="canvas__body" id="canvas-body">
+            <p class="canvas__empty">
+                Ask a question on the left. The plan, the authorization decisions and the compiled
+                SQL all appear as they happen.
+            </p>
+        </div>
+    </section>
+</div>

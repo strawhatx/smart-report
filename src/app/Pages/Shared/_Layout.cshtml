@@ -1,0 +1,91 @@
+@inject IHostEnvironment Environment
+@{
+    var nonce = Context.CspNonce();
+    var principal = ViewData["Principal"] as Principal;
+    var isDev = Environment.IsDevelopment();
+}
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] · Smart Report</title>
+    <meta name="description" content="@(ViewData["Description"] ?? "Stop maintaining reports. Let people ask questions instead — answered by a model that runs on your hardware, bounded by the permissions you already wrote.")" />
+
+    <meta property="og:title" content="@ViewData["Title"] · Smart Report" />
+    <meta property="og:description" content="@(ViewData["Description"] ?? "AI reports, governed by the permissions you already have.")" />
+    <meta property="og:type" content="website" />
+
+    <link rel="icon" href="~/favicon.ico" />
+    <link rel="stylesheet" href="~/css/tokens.css" />
+    <link rel="stylesheet" href="~/css/base.css" />
+    @await RenderSectionAsync("Head", required: false)
+</head>
+<body data-page="@ViewData["PageKey"]">
+<a class="skip-link" href="#main">Skip to content</a>
+
+@if (isDev)
+{
+    @* Rule A12: this switcher has no password. It must be impossible to mistake for part of the
+       product, so it is announced rather than tucked away. *@
+    <div class="dev-banner" role="region" aria-label="Development sign-in">
+        <div class="shell dev-banner__inner">
+            <strong>DEV</strong>
+            <span>Unauthenticated identity switcher — development only.</span>
+            <span class="dev-banner__spacer"></span>
+            @foreach (var demo in DemoPrincipalList.All)
+            {
+                <form method="post" action="/dev/signin-as/@demo.Key">
+                    <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
+                    <button type="submit" class="dev-switch"
+                            aria-pressed="@((principal?.Key == demo.Key).ToString().ToLowerInvariant())">
+                        @demo.Label
+                    </button>
+                </form>
+            }
+            @if (principal is not null)
+            {
+                <form method="post" action="/signout">
+                    <button type="submit" class="dev-switch">Sign out</button>
+                </form>
+            }
+        </div>
+    </div>
+}
+
+<header class="masthead">
+    <div class="shell masthead__inner">
+        <a class="wordmark" href="/">
+            <span class="wordmark__bracket">[</span>SR<span class="wordmark__bracket">]</span>
+            <span>SMARTREPORT</span>
+        </a>
+        <div class="masthead__spacer"></div>
+        <nav class="masthead__nav" aria-label="Main">
+            <a href="/" aria-current="@(ViewData["PageKey"] as string == "home" ? "page" : null)">Overview</a>
+            <a href="/reports" aria-current="@(ViewData["PageKey"] as string == "reports" ? "page" : null)">Reports</a>
+        </nav>
+        @if (principal is not null)
+        {
+            <span class="label" title="Role is read from the database on every request">
+                @principal.DisplayName · @Roles.Label(principal.Role)
+            </span>
+        }
+    </div>
+</header>
+
+<main id="main">
+    @RenderBody()
+</main>
+
+<footer class="site-footer">
+    <div class="shell site-footer__inner">
+        <span class="label">[SR] SMARTREPORT</span>
+        <span>A demo. The model plans; the database decides.</span>
+        <span class="masthead__spacer"></span>
+        <span class="label">Postgres RLS · local model</span>
+    </div>
+</footer>
+
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

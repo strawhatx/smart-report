@@ -26,7 +26,10 @@ internal static class RowLevelSecurity
     /// </summary>
     public const string AppRole = "smartreport_app";
 
-    private const string CurrentRole = "current_setting('app.role', true)";
+    // NULLIF matters as much as the IS NOT NULL check below. set_config cannot store NULL, so
+    // "no role" arrives as an empty string — and '' IS NOT NULL is true, which would wave an
+    // unconfigured connection straight through. Both spellings of "unset" must collapse to NULL.
+    private const string CurrentRole = "NULLIF(current_setting('app.role', true), '')";
     private const string CurrentRegion = "NULLIF(current_setting('app.region_id', true), '')::int";
     private const string CurrentPrincipal = "NULLIF(current_setting('app.principal', true), '')";
 
