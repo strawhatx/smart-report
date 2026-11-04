@@ -109,18 +109,30 @@ The switcher has no password and is **disabled outside development** — see `A1
 The default planner is scripted: a fixed question→plan table, no model, no key. It keeps the demo
 runnable anywhere and the governance tests free of a model's variability.
 
-For the real thing, set a provider and a key:
+### Free, in about two minutes
+
+[Groq](https://console.groq.com) gives a free API key with no card. Then:
 
 ```bash
-dotnet user-secrets set "Ai:ApiKey" "sk-..." --project src/app
+dotnet user-secrets set "Ai:ApiKey" "gsk_..." --project src/app
+dotnet user-secrets set "Ai:Provider" "groq"  --project src/app
 ```
+
+That's it — `groq` sets its own base URL. The default model is `openai/gpt-oss-120b`, one of the
+models Groq supports **strict** JSON-schema decoding on. If you change it, check Groq's
+[structured outputs](https://console.groq.com/docs/structured-outputs) page first: the supported
+list has moved before, and a model that can't take a schema drops the planner to plain-JSON mode.
+That isn't fatal — the validator still rejects anything off-catalog — but it is a weaker
+guarantee, so the rail says so when it happens.
+
+### Other providers
 
 ```jsonc
 // appsettings.Development.json — never the key itself (C1/C2)
 { "Ai": { "Provider": "anthropic", "Model": "claude-opus-5-5" } }
 ```
 
-`anthropic` · `openai` · `ollama` · `openai-compatible` (Groq, OpenRouter, Together, vLLM, LM
+`groq` · `anthropic` · `openai` · `ollama` · `openai-compatible` (OpenRouter, Together, vLLM, LM
 Studio — set `Ai:BaseUrl`). One `IChatClient`; `ChatClientFactory` is the only file that names a
 vendor.
 
@@ -129,13 +141,51 @@ dimension fields are `enum`s of the keys that actually exist. An invented measur
 impossible rather than rejected after the fact. `SpecValidator` still runs, because schema
 enforcement varies by provider.
 
-**It will not fall back.** If the provider is unreachable you get an error saying so, never a
-scripted answer wearing a model's name — and the rail names the planner under every report.
+**It will not fall back to the scripted planner.** If the provider is unreachable you get an error
+saying so, never a canned answer wearing a model's name — and the rail names the planner under
+every report.
 
-> **What leaves the machine.** With a hosted provider, the question and the catalog's *key names*
-> are sent. **Rows never are** — the model only ever sees measure names, which is a direct
-> consequence of planning a spec instead of writing SQL. With `ollama` or `openai-compatible`
-> pointed at your own server, nothing leaves at all.
+### Asking for a particular chart
+
+You can say how you want it drawn — *"show orders by month as a line chart"*, *"just give me the
+numbers"* — and the model sets a `chart` field alongside the measures. But a requested shape is
+only honoured where the data supports it:
+
+| You ask for | Over months | Over carriers |
+|---|---|---|
+| a line | a line | **bars**, with: *"Asked for a line, shown as bars: these groups have no order, so a line would suggest a trend between them that does not exist."* |
+| a ring | a ring, up to six slices | bars past six: *"…too many to compare by angle."* |
+| no chart | the figures | the figures |
+
+A line across categories claims the gaps between them mean something. Rather than draw that, the
+server substitutes the honest form **and says so on the panel** — quietly ignoring the request
+would be worse than either.
+
+Grouping by two things at once (carrier *and* month) becomes a table for the same reason: one
+chart would have to flatten one grouping into the other, and the result reads as every carrier
+repeated per period. The rule lives in `ChartChoice` and is covered by `ChartChoiceTests`.
+
+### What the model actually sees
+
+Two calls, with different exposure, and it's worth being precise about which is which:
+
+| Step | What is sent | What is not |
+|---|---|---|
+| **Planning** | the question, and the catalog's **key names** | no schema, no rows, no connection |
+| **Summarising** | the **aggregated figures the report returned** — KPI values and chart points | no raw rows, nothing the policy engine withheld, no ability to ask for more |
+
+The planning step can't leak data, because it never has any: planning a spec instead of writing
+SQL means the model only ever sees measure names. The summarising step is the one that sends
+figures — that's the cost of having it write *"UPS Ground accounts for about half of your late
+shipments"* instead of restating the chart title.
+
+It is on by default. Turn it off with `"Ai:SummariseResults": false`, and the reports are
+identical minus the prose. Either way **the UI says which model wrote the summary and whether the
+figures left the machine**, under every summary — you shouldn't have to read a config file to
+find that out.
+
+With `ollama` or `openai-compatible` pointed at your own server, nothing leaves at all and the
+original "your data stays with you" pitch holds literally.
 
 ---
 

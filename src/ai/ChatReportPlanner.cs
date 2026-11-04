@@ -45,27 +45,31 @@ public sealed class ChatReportPlanner(
     {
         yield return new PlannerEvent.Thinking($"Asking {ProviderName} to pick measures from the catalog.");
 
-        var chatOptions = new ChatOptions
+        var messages = new List<ChatMessage>
         {
-            Temperature = 0,
-            ResponseFormat = ChatResponseFormat.ForJsonSchema(
-                CatalogSchema.Build(catalog),
-                schemaName: "report_plan",
-                schemaDescription: "A report plan expressed only in catalog keys."),
+            new(ChatRole.System, SystemPrompt),
+            new(ChatRole.User, BuildPrompt(question, principal)),
         };
 
         string content;
+        var degraded = false;
+
         try
         {
-            var response = await chat.GetResponseAsync(
-                [
-                    new ChatMessage(ChatRole.System, SystemPrompt),
-                    new ChatMessage(ChatRole.User, BuildPrompt(question, principal)),
-                ],
-                chatOptions,
-                cancellationToken);
+            content = await CompleteAsync(messages, SchemaFormat(), cancellationToken);
+        }
+        catch (Exception ex) when (IsSchemaRejection(ex))
+        {
+            // Not every model on every provider accepts a JSON schema, and which ones do has
+            // moved before. Dropping to plain JSON mode keeps the demo working — but it weakens
+            // the guarantee from "an invented key is impossible" to "an invented key is
+            // rejected", so it is said out loud rather than absorbed.
+            logger.LogWarning(ex,
+                "{Model} on {Provider} rejected the JSON schema; falling back to JSON object mode.",
+                _options.Model, _options.Provider);
 
-            content = response.Text;
+            degraded = true;
+            content = await CompleteAsync(messages, ChatResponseFormat.Json, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -74,6 +78,13 @@ public sealed class ChatReportPlanner(
             throw new InvalidOperationException(
                 $"The model provider ({_options.Provider}) did not answer. Check Ai:ApiKey and "
                 + "Ai:BaseUrl, or set Ai:Provider to 'scripted'.", ex);
+        }
+
+        if (degraded)
+        {
+            yield return new PlannerEvent.Thinking(
+                $"{_options.Model} does not accept a JSON schema, so the plan is only validated "
+                + "after the fact, not constrained during generation.");
         }
 
         yield return new PlannerEvent.Thinking("Reading the plan it returned.");
@@ -90,12 +101,57 @@ public sealed class ChatReportPlanner(
         yield return new PlannerEvent.Planned(parsed.Spec);
     }
 
+    private ChatResponseFormat SchemaFormat() => ChatResponseFormat.ForJsonSchema(
+        CatalogSchema.Build(catalog),
+        schemaName: "report_plan",
+        schemaDescription: "A report plan expressed only in catalog keys.");
+
+    private async Task<string> CompleteAsync(
+        IList<ChatMessage> messages, ChatResponseFormat format, CancellationToken cancellationToken)
+    {
+        var response = await chat.GetResponseAsync(
+            messages,
+            new ChatOptions { Temperature = 0, ResponseFormat = format },
+            cancellationToken);
+
+        return response.Text;
+    }
+
+    /// <summary>
+    /// Providers signal "this model cannot do schemas" as an ordinary 400, so the message is the
+    /// only thing to go on. Matched narrowly: a genuine outage must not be mistaken for this.
+    /// </summary>
+    private static bool IsSchemaRejection(Exception ex) =>
+        ex is not OperationCanceledException
+        && ex.Message.Contains("json_schema", StringComparison.OrdinalIgnoreCase)
+        && (ex.Message.Contains("not support", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("unsupported", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("invalid", StringComparison.OrdinalIgnoreCase));
+
     private const string SystemPrompt = """
         You translate a question about an order-fulfilment account into a JSON report plan.
 
         You do not write SQL and you never see the data. You may only use the model, metric,
         dimension and filter keys in the catalog you are given. If the question needs something
         that is not there, set no_match to true and say what is missing.
+
+        Shape a report the way a good analyst would:
+        - Lead with a "headline" query: the key measures with NO dimensions, so the report opens
+          with figures rather than a chart. Label it "headline".
+        - When the question names a period, add a second query with the same measures over the
+          period before it, labelled "comparison:<PeriodName>" (for example
+          "comparison:September"). It is shown as a change against the headline, not as a chart.
+        - Then add one query per breakdown the question asks for, each labelled "".
+        - Skip the headline and comparison only when the question is narrowly about one
+          breakdown and nothing else.
+
+        Charts:
+        - Leave "chart" as "auto" unless the reader asked for a particular shape. Auto picks a
+          line for time, a ring for a small part-to-whole split, and bars otherwise.
+        - "line" only when the grouping is time. A line across categories implies an order that
+          is not there, and the server will replace it with bars and say so.
+        - "donut" only for six parts or fewer that add up to a whole.
+        - "table" when the reader wants the figures rather than a picture.
 
         Rules:
         - Dates are ISO 8601. A "between" filter takes exactly two values: start inclusive, end

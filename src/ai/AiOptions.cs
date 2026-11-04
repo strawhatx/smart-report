@@ -14,13 +14,22 @@ public sealed class AiOptions
     public const string SectionName = "Ai";
 
     /// <summary>
-    /// <c>scripted</c> (default, no key needed) · <c>anthropic</c> · <c>openai</c> ·
-    /// <c>ollama</c> · <c>openai-compatible</c> (Groq, OpenRouter, Together, vLLM, LM Studio —
-    /// anything that speaks the OpenAI chat API, via <see cref="BaseUrl"/>).
+    /// <c>scripted</c> (default, no key needed) · <c>groq</c> · <c>anthropic</c> ·
+    /// <c>openai</c> · <c>ollama</c> · <c>openai-compatible</c> (OpenRouter, Together, vLLM,
+    /// LM Studio — anything that speaks the OpenAI chat API, via <see cref="BaseUrl"/>).
     /// </summary>
     public string Provider { get; set; } = "scripted";
 
-    public string Model { get; set; } = "claude-opus-5-5";
+    /// <summary>
+    /// Default suits <c>groq</c>, whose free tier needs no card.
+    ///
+    /// <para>
+    /// Groq supports strict JSON-schema decoding on a specific set of models and that set has
+    /// moved before — if a provider rejects the schema the planner says so rather than quietly
+    /// dropping to free-form text. See README for the current list.
+    /// </para>
+    /// </summary>
+    public string Model { get; set; } = "openai/gpt-oss-120b";
 
     /// <summary>
     /// Never in <c>appsettings.json</c> (C1/C2). Use <c>dotnet user-secrets</c> in development or
@@ -36,5 +45,18 @@ public sealed class AiOptions
     public bool IsScripted => string.Equals(Provider, "scripted", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>True when the request leaves this machine. Surfaced in the UI, not hidden.</summary>
-    public bool IsHosted => Provider.ToLowerInvariant() is "anthropic" or "openai" or "openai-compatible";
+    public bool IsHosted =>
+        Provider.ToLowerInvariant() is "anthropic" or "openai" or "openai-compatible" or "groq";
+
+    /// <summary>
+    /// Whether the model may read the figures a report returned, in order to write the summary.
+    ///
+    /// <para>
+    /// This is the one setting that changes what leaves the machine. With it on, aggregated
+    /// results — never raw rows, and never anything the asker is not already authorized for —
+    /// are sent to the provider so it can describe them. With a local provider nothing leaves
+    /// either way. The UI states which, under every report.
+    /// </para>
+    /// </summary>
+    public bool SummariseResults { get; set; } = true;
 }

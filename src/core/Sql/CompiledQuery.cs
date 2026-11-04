@@ -21,6 +21,7 @@ public sealed record ResultColumn(
 public sealed record CompiledQuery(
     string Model,
     string? Label,
+    Reporting.ChartKind Chart,
     string Sql,
     IReadOnlyList<QueryParameter> Parameters,
     IReadOnlyList<ResultColumn> Columns,

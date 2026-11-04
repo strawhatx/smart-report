@@ -58,8 +58,23 @@ public static class CatalogSchema
                 ["metrics"] = new JsonObject { ["type"] = "array", ["items"] = Enum(metricKeys) },
                 ["dimensions"] = new JsonObject { ["type"] = "array", ["items"] = Enum(dimensionKeys) },
                 ["filters"] = new JsonObject { ["type"] = "array", ["items"] = filterSchema },
+                ["label"] = new JsonObject
+                {
+                    ["type"] = "string",
+                    ["description"] =
+                        "\"headline\" for summary figures, \"comparison:<Period>\" for the "
+                        + "previous period, or \"\" for an ordinary panel.",
+                },
+                ["chart"] = new JsonObject
+                {
+                    ["type"] = "string",
+                    ["enum"] = Array("auto", "bar", "line", "donut", "table"),
+                    ["description"] =
+                        "How to draw it. Use auto unless the reader asked for something "
+                        + "specific. line needs a time grouping; donut needs six parts or fewer.",
+                },
             },
-            ["required"] = Array("model", "metrics", "dimensions", "filters"),
+            ["required"] = Array("model", "metrics", "dimensions", "filters", "label", "chart"),
             ["additionalProperties"] = false,
         };
 

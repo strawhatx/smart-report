@@ -131,6 +131,7 @@ public static class ReportStreamEndpoint
             ReportEvent.Sql e => new { model = e.Model, sql = e.Text },
             ReportEvent.Rows e => new { model = e.Model, count = e.Count },
             ReportEvent.Document e => new { report = e.Report },
+            ReportEvent.Findings e => new { items = e.Items, disclosure = e.Disclosure },
             ReportEvent.Refused e => new { message = e.Message, remedy = e.Remedy },
             ReportEvent.Failed e => new { message = e.Message },
             _ => new { },

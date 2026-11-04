@@ -26,6 +26,17 @@ public abstract record ReportEvent(string Name)
     public sealed record Document(ReportDocument Report) : ReportEvent("document");
 
     /// <summary>
+    /// What the report says, written by the model from the figures it returned.
+    ///
+    /// <para>
+    /// Sent after the document, so the report renders whether or not narration arrives — and so
+    /// a slow or unavailable narrator costs the reader nothing but prose.
+    /// </para>
+    /// </summary>
+    public sealed record Findings(
+        IReadOnlyList<Abstractions.Finding> Items, string Disclosure) : ReportEvent("findings");
+
+    /// <summary>
     /// The question was understood and deliberately not answered.
     /// </summary>
     /// <param name="Remedy">

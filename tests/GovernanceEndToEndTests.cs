@@ -81,9 +81,9 @@ public sealed class GovernanceEndToEndTests(PostgresFixture fixture)
 
         Assert.Empty(events.OfType<ReportEvent.Refused>());
 
-        var safeguard = Assert.Single(events.OfType<ReportEvent.Guard>()
-            .Select(g => g.Decision)
-            .Where(d => d.Outcome == PolicyOutcome.Aggregated));
+        var safeguard = Assert.Single(
+            events.OfType<ReportEvent.Guard>().Select(g => g.Decision),
+            d => d.Outcome == PolicyOutcome.Aggregated);
         Assert.Contains("anonymized", safeguard.Reason, StringComparison.OrdinalIgnoreCase);
 
         // Both halves came back: the client's own figure and the cohort's.
@@ -112,8 +112,9 @@ public sealed class GovernanceEndToEndTests(PostgresFixture fixture)
         var refusal = Assert.Single(events.OfType<ReportEvent.Refused>());
         Assert.Contains("internal", refusal.Message, StringComparison.OrdinalIgnoreCase);
 
-        var denial = Assert.Single(events.OfType<ReportEvent.Guard>()
-            .Select(g => g.Decision).Where(d => d.Outcome == PolicyOutcome.Denied));
+        var denial = Assert.Single(
+            events.OfType<ReportEvent.Guard>().Select(g => g.Decision),
+            d => d.Outcome == PolicyOutcome.Denied);
 
         // The redirect points at something Dana may actually use — not a second dead end.
         Assert.NotNull(denial.Remedy);
@@ -148,8 +149,9 @@ public sealed class GovernanceEndToEndTests(PostgresFixture fixture)
     {
         var events = await AskAsync("Show our fees and invoice breakdown", TestPrincipals.Dana);
 
-        var denial = Assert.Single(events.OfType<ReportEvent.Guard>()
-            .Select(g => g.Decision).Where(d => d.Outcome == PolicyOutcome.Denied));
+        var denial = Assert.Single(
+            events.OfType<ReportEvent.Guard>().Select(g => g.Decision),
+            d => d.Outcome == PolicyOutcome.Denied);
 
         Assert.Contains("account owner", denial.Reason, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Priya Shah", denial.Remedy ?? string.Empty, StringComparison.Ordinal);
@@ -171,10 +173,10 @@ public sealed class GovernanceEndToEndTests(PostgresFixture fixture)
     [Fact]
     public async Task Every_report_says_whose_data_it_read()
     {
-        var scope = Assert.Single((await AskAsync("How are we doing on time?", TestPrincipals.Dana))
-            .OfType<ReportEvent.Guard>()
-            .Select(g => g.Decision)
-            .Where(d => d.Outcome == PolicyOutcome.Scoped));
+        var scope = Assert.Single(
+            (await AskAsync("How are we doing on time?", TestPrincipals.Dana))
+                .OfType<ReportEvent.Guard>().Select(g => g.Decision),
+            d => d.Outcome == PolicyOutcome.Scoped);
 
         Assert.Contains("Trailhead Coffee Co.", scope.Reason, StringComparison.Ordinal);
     }

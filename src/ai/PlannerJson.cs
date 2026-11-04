@@ -44,6 +44,8 @@ public static class PlannerJson
         [JsonPropertyName("dimensions")] public List<string>? Dimensions { get; set; }
         [JsonPropertyName("filters")] public List<FilterDto>? Filters { get; set; }
         [JsonPropertyName("limit")] public int? Limit { get; set; }
+        [JsonPropertyName("label")] public string? Label { get; set; }
+        [JsonPropertyName("chart")] public string? Chart { get; set; }
     }
 
     private sealed class FilterDto
@@ -84,12 +86,13 @@ public static class PlannerJson
 
         foreach (var query in dto.Queries ?? [])
         {
-            queries.Add(ToQuery(query.Model, query.Metrics, query.Dimensions, query.Filters, query.Limit));
+            queries.Add(ToQuery(query.Model, query.Metrics, query.Dimensions, query.Filters,
+                query.Limit, query.Label, query.Chart));
         }
 
         if (queries.Count == 0 && dto.Model is not null)
         {
-            queries.Add(ToQuery(dto.Model, dto.Metrics, dto.Dimensions, dto.Filters, null));
+            queries.Add(ToQuery(dto.Model, dto.Metrics, dto.Dimensions, dto.Filters, null, null, null));
         }
 
         if (queries.Count == 0)
@@ -101,7 +104,8 @@ public static class PlannerJson
     }
 
     private static SpecQuery ToQuery(
-        string? model, List<string>? metrics, List<string>? dimensions, List<FilterDto>? filters, int? limit) =>
+        string? model, List<string>? metrics, List<string>? dimensions, List<FilterDto>? filters,
+        int? limit, string? label, string? chart) =>
         new(
             // An absent model name becomes an empty string, which the validator rejects as an
             // unknown model. Nothing is guessed on the model's behalf.
@@ -109,7 +113,13 @@ public static class PlannerJson
             metrics?.Where(m => !string.IsNullOrWhiteSpace(m)).ToArray() ?? [],
             dimensions?.Where(d => !string.IsNullOrWhiteSpace(d)).ToArray() ?? [],
             (filters ?? []).Select(ToFilter).ToArray(),
-            limit);
+            limit,
+            string.IsNullOrWhiteSpace(label) ? null : label,
+            // An unrecognised value becomes Auto, which is the safe default — a bad chart name
+            // should not cost the user their report.
+            Enum.TryParse<SmartReport.Core.Reporting.ChartKind>(chart, ignoreCase: true, out var kind)
+                ? kind
+                : SmartReport.Core.Reporting.ChartKind.Auto);
 
     private static SpecFilter ToFilter(FilterDto filter)
     {

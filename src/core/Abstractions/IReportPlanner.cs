@@ -34,5 +34,5 @@ public interface IReportPlanner
     string ProviderName { get; }
 
     IAsyncEnumerable<PlannerEvent> PlanAsync(
-        string question, Principal principal, CancellationToken cancellationToken);
+        PlanRequest request, Principal principal, CancellationToken cancellationToken);
 }

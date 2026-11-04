@@ -108,7 +108,12 @@ public static class ReportBuilder
                 .Select(row => new SeriesPoint(AsText(row[labelIndex]) ?? "—", AsDecimal(row[i])))
                 .ToArray();
 
-            series.Add(new ChartSeries(column.Key, column.Label, column.Unit, temporal, partToWhole, points));
+            var choice = ChartChoice.Resolve(
+                query.Chart, temporal, partToWhole, points.Length, query.Dimensions.Count);
+
+            series.Add(new ChartSeries(
+                column.Key, column.Label, column.Unit, temporal, partToWhole,
+                choice.Kind, choice.Note, points));
         }
 
         return series;

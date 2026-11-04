@@ -22,7 +22,7 @@ public sealed class ReportsModel(PrincipalContext principals, SavedReportStore s
     public string Question { get; private set; } = string.Empty;
 
     public async Task<IActionResult> OnGetAsync(
-        Guid? saved, int? template, CancellationToken cancellationToken)
+        Guid? saved, int? template, string? q, CancellationToken cancellationToken)
     {
         await LoadAsync("report", cancellationToken);
 
@@ -55,6 +55,13 @@ public sealed class ReportsModel(PrincipalContext principals, SavedReportStore s
 
             Title = match.Title;
             Question = match.Question;
+        }
+        else if (!string.IsNullOrWhiteSpace(q))
+        {
+            // A question can be linked. It is only ever echoed into a textarea — Razor encodes it
+            // — and it goes through the same server-side validation as anything typed (C4).
+            Question = q.Trim();
+            Title = "New report";
         }
 
         return Page();

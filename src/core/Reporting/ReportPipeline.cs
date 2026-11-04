@@ -20,17 +20,23 @@ public sealed class ReportPipeline(
     SpecValidator validator,
     PolicyEngine policy,
     SqlCompiler compiler,
-    IReportQueryRunner runner)
+    IReportQueryRunner runner,
+    IReportNarrator? narrator = null)
 {
+    public IAsyncEnumerable<ReportEvent> RunAsync(
+        string question, Principal principal, CancellationToken cancellationToken) =>
+        RunAsync(new PlanRequest(question), principal, cancellationToken);
+
     public async IAsyncEnumerable<ReportEvent> RunAsync(
-        string question,
+        PlanRequest request,
         Principal principal,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        var question = request.Question;
         ReportSpec? planned = null;
         string? failure = null;
 
-        await foreach (var step in Plan(question, principal, cancellationToken))
+        await foreach (var step in Plan(request, principal, cancellationToken))
         {
             switch (step)
             {
@@ -122,8 +128,34 @@ public sealed class ReportPipeline(
             yield break;
         }
 
-        yield return new ReportEvent.Document(
-            ReportBuilder.Build(governed, executed, planner.ProviderName));
+        var document = ReportBuilder.Build(governed, executed, planner.ProviderName);
+        yield return new ReportEvent.Document(document);
+
+        // Narration runs last and cannot fail the report. By this point every query has already
+        // been authorized and executed, so the narrator is describing output rather than asking
+        // for anything.
+        if (narrator is { IsEnabled: true })
+        {
+            IReadOnlyList<Finding> findings = [];
+            try
+            {
+                findings = await narrator.DescribeAsync(question, document, principal, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Deliberately swallowed: prose about a report is not worth losing the report
+                // over. The absence is visible — no findings appear — so nothing is being hidden.
+            }
+
+            if (findings.Count > 0)
+            {
+                yield return new ReportEvent.Findings(findings, narrator.Disclosure);
+            }
+        }
 
         yield return new ReportEvent.Done();
     }
@@ -133,9 +165,9 @@ public sealed class ReportPipeline(
     /// unhandled exception mid-stream. Note there is no fallback to another planner.
     /// </summary>
     private async IAsyncEnumerable<PlannerEvent> Plan(
-        string question, Principal principal, [EnumeratorCancellation] CancellationToken cancellationToken)
+        PlanRequest request, Principal principal, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var enumerator = planner.PlanAsync(question, principal, cancellationToken).GetAsyncEnumerator(cancellationToken);
+        var enumerator = planner.PlanAsync(request, principal, cancellationToken).GetAsyncEnumerator(cancellationToken);
         try
         {
             while (true)

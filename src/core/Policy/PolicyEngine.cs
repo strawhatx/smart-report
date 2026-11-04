@@ -94,7 +94,7 @@ public sealed class PolicyEngine(DataCatalog catalog)
             }
 
             governed.Add(new GovernedQuery(
-                new SpecQuery(model.Key, metrics, dimensions, filters, query.Limit, query.Label),
+                new SpecQuery(model.Key, metrics, dimensions, filters, query.Limit, query.Label, query.Chart),
                 Math.Clamp(query.Limit ?? SpecLimits.DefaultRowLimit, 1, SpecLimits.MaxRowLimit)));
 
             foreach (var table in model.Tables)

@@ -23,13 +23,19 @@ public sealed record SpecFilter(string Field, FilterOp Op, IReadOnlyList<string>
 /// <c>shipping</c> can be "this month" and "last month"; the UI uses the label to pair them into
 /// a delta instead of drawing the same chart twice.
 /// </param>
+/// <param name="Chart">
+/// A requested form. <see cref="Reporting.ChartKind.Auto"/> — the default — lets the data decide,
+/// which is right most of the time; an explicit choice is honoured only where it would not
+/// mislead. See <see cref="Reporting.ChartChoice"/>.
+/// </param>
 public sealed record SpecQuery(
     string Model,
     IReadOnlyList<string> Metrics,
     IReadOnlyList<string> Dimensions,
     IReadOnlyList<SpecFilter> Filters,
     int? Limit = null,
-    string? Label = null);
+    string? Label = null,
+    Reporting.ChartKind Chart = Reporting.ChartKind.Auto);
 
 /// <summary>
 /// What the planner returns: a structured request, not code. Several queries are allowed so one

@@ -159,9 +159,14 @@ function handle(name, payload) {
       lastReport = payload.report;
       renderReport(payload.report);
       addProvenanceLine(payload.report);
-      addSuggestions();
       exportButton.disabled = false;
       saveButton.disabled = false;
+      break;
+    case 'findings':
+      addFindings(payload.items, payload.disclosure);
+      break;
+    case 'done':
+      addSuggestions();
       break;
     case 'refused':
       renderRefusal(payload.message, payload.remedy);
@@ -287,6 +292,53 @@ function collectSql(model, sql) {
   sqlList.appendChild(block);
 }
 
+/**
+ * What the report says, written by the model from the figures that came back.
+ *
+ * This sits at the top of the rail rather than the bottom: it is the part a reader actually
+ * wants, and the transcript underneath it is the evidence for anyone who cares to check.
+ */
+function addFindings(items, disclosure) {
+  if (!items?.length) return;
+
+  const li = document.createElement('li');
+  li.className = 'rounded-xl border border-rule bg-surface p-4';
+
+  const heading = document.createElement('p');
+  heading.className = 'label-mono mb-3';
+  heading.textContent = 'What this shows';
+  li.appendChild(heading);
+
+  const list = document.createElement('ol');
+  list.className = 'space-y-3';
+
+  items.forEach((finding, index) => {
+    const item = document.createElement('li');
+    item.className = 'grid grid-cols-[1.25rem_1fr] gap-x-2 text-[14px] leading-6';
+    item.innerHTML =
+      `<span class="text-ink-faint tabular-nums">${index + 1}.</span>`
+      + `<span><strong class="font-semibold">${escapeHtml(finding.title)}</strong> `
+      + `<span class="text-ink-soft">${escapeHtml(finding.detail)}</span></span>`;
+    list.appendChild(item);
+  });
+
+  li.appendChild(list);
+
+  if (disclosure) {
+    const note = document.createElement('p');
+    note.className = 'mt-3 border-t border-rule pt-2.5 text-[12px] leading-5 text-ink-faint';
+    note.textContent = disclosure;
+    li.appendChild(note);
+  }
+
+  // Straight after the question, above the transcript of how it got there — and scroll back to
+  // it. The rail follows each step down as the report builds, so the summary would otherwise
+  // land off-screen at the moment it becomes the most useful thing there.
+  const anchor = stream.firstElementChild?.nextElementSibling ?? null;
+  stream.insertBefore(li, anchor);
+  stream.scrollTo({ top: 0 });
+}
+
 function addProvenanceLine(report) {
   const seconds = ((performance.now() - startedAt) / 1000).toFixed(1);
   const li = document.createElement('li');
@@ -321,8 +373,8 @@ function addSuggestions() {
     li.appendChild(button);
   }
 
+  // Deliberately does not scroll: the summary sits at the top and has just been put there.
   stream.appendChild(li);
-  stream.scrollTop = stream.scrollHeight;
 }
 
 /* ─────────────────────────── the report ─────────────────────────── */
@@ -369,14 +421,17 @@ function renderReport(report) {
 }
 
 function kpiRow(kpis, previous, comparedTo) {
+  // Outlines rather than a 1px gap over a coloured container: the gap trick turns any unused
+  // cell into a grey block, and how many cells are unused changes with the breakpoint.
   const row = document.createElement('div');
-  row.className = 'grid gap-px overflow-hidden rounded-xl border border-rule bg-rule sm:grid-cols-2 xl:grid-cols-4';
+  row.className = 'grid overflow-hidden rounded-xl bg-surface outline outline-1 outline-rule '
+    + 'sm:grid-cols-2 xl:grid-cols-4';
 
   for (const kpi of kpis) {
     const before = previous.find((p) => p.key === kpi.key)?.value ?? null;
 
     const tile = document.createElement('div');
-    tile.className = 'bg-surface p-4';
+    tile.className = 'bg-surface p-4 outline outline-1 outline-rule -outline-offset-[0.5px]';
     tile.innerHTML =
       `<p class="text-[13px] text-ink-soft">${escapeHtml(kpi.label)}</p>`
       + `<p class="mt-1.5 text-[clamp(1.5rem,4vw,2rem)] font-bold leading-none tabular-nums">`
@@ -386,17 +441,6 @@ function kpiRow(kpis, previous, comparedTo) {
     if (note) tile.insertAdjacentHTML('beforeend', note);
 
     row.appendChild(tile);
-  }
-
-  // The hairlines between tiles are the container showing through a 1px gap, so an incomplete
-  // final row would leave a grey block. Fillers finish it.
-  const columns = kpis.length > 4 ? 4 : kpis.length;
-  const remainder = (columns - (kpis.length % columns)) % columns;
-  for (let i = 0; i < remainder; i++) {
-    const filler = document.createElement('div');
-    filler.className = 'bg-surface';
-    filler.setAttribute('aria-hidden', 'true');
-    row.appendChild(filler);
   }
 
   return row;
@@ -444,27 +488,44 @@ function panel(section) {
 
     const chart = buildChart(series, section);
     if (chart) wrap.appendChild(chart);
+
+    // Said out loud when a requested shape was replaced. Quietly drawing something else would
+    // leave the reader thinking the system ignored them.
+    if (series.chartNote) {
+      const note = document.createElement('p');
+      note.className = 'mt-3 text-[13px] leading-6 text-ink-faint';
+      note.textContent = series.chartNote;
+      wrap.appendChild(note);
+    }
   }
+
+  const wantsTable = section.charts.some((c) => c.chart === 'table') || section.charts.length === 0;
 
   const details = document.createElement('details');
   details.className = 'mt-5 border-t border-rule pt-3';
   details.innerHTML = '<summary class="label-mono cursor-pointer hover:text-ink">Show the data</summary>';
+  if (wantsTable) details.open = true;
   details.appendChild(dataTable(section.table));
   wrap.appendChild(details);
 
   return wrap;
 }
 
+/**
+ * The form was already decided on the server, where the request was checked against the data —
+ * so this only has to draw it. A `table` panel draws nothing; the figures below it are the panel.
+ */
 function buildChart(series, section) {
-  if (series.isTemporal) {
-    return lineChart(splitByYear(series), series.unit);
+  switch (series.chart) {
+    case 'line':
+      return lineChart(splitByYear(series), series.unit);
+    case 'donut':
+      return donutChart(series, { totalLabel: section.model === 'shipping' ? 'orders' : 'total' });
+    case 'table':
+      return null;
+    default:
+      return barChart(series);
   }
-
-  if (series.isPartToWhole) {
-    return donutChart(series, { totalLabel: section.model === 'shipping' ? 'orders' : 'total' });
-  }
-
-  return barChart(series);
 }
 
 /**

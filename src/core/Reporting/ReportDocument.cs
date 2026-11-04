@@ -7,8 +7,11 @@ public sealed record KpiTile(string Key, string Label, decimal? Value, string Un
 
 public sealed record SeriesPoint(string Label, decimal? Value);
 
+/// <param name="Chart">The form actually drawn, after the request was checked against the data.</param>
+/// <param name="ChartNote">Set only when the requested form was replaced, saying what and why.</param>
 public sealed record ChartSeries(
     string Key, string Label, string Unit, bool IsTemporal, bool IsPartToWhole,
+    ChartKind Chart, string? ChartNote,
     IReadOnlyList<SeriesPoint> Points);
 
 public sealed record ReportTable(

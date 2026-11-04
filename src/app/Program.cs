@@ -67,6 +67,7 @@ else
     // fails here rather than on someone's first question.
     builder.Services.AddSingleton(ChatClientFactory.Create(aiOptions));
     builder.Services.AddSingleton<IReportPlanner, ChatReportPlanner>();
+    builder.Services.AddSingleton<IReportNarrator, ChatReportNarrator>();
 }
 
 // --- Authentication. The cookie carries a principal key and nothing else (A1, A5).

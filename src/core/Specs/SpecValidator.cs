@@ -116,7 +116,7 @@ public sealed class SpecValidator(DataCatalog catalog)
             ? SpecLimits.DefaultRowLimit
             : Math.Clamp(query.Limit.Value, 1, SpecLimits.MaxRowLimit);
 
-        return new SpecQuery(model.Key, metrics, dimensions, filters, limit, query.Label);
+        return new SpecQuery(model.Key, metrics, dimensions, filters, limit, query.Label, query.Chart);
     }
 
     private static List<string> ValidateKeys(

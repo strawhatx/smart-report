@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
     <ProjectReference Include="..\core\SmartReport.Core.csproj" />
@@ -16,6 +16,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>b36aa9b2-972c-461c-8067-36b0418312e7</UserSecretsId>
   </PropertyGroup>
 
   <!--
@@ -40,17 +41,13 @@
 
   <Target Name="EnsureTailwindCli" BeforeTargets="BuildTailwind" Condition="!Exists('$(TailwindExe)')">
     <Message Importance="high" Text="Tailwind CLI not found - fetching the pinned release..." />
-    <Exec Command="sh &quot;$(MSBuildThisFileDirectory)..\..\scripts\get-tailwind.sh&quot;"
-          Condition="'$(OS)' != 'Windows_NT'" />
-    <Error Condition="'$(OS)' == 'Windows_NT'"
-           Text="Download tailwindcss-windows-x64.exe into tools\tailwind\tailwindcss.exe (see scripts/get-tailwind.sh)." />
+    <Exec Command="sh &quot;$(MSBuildThisFileDirectory)..\..\scripts\get-tailwind.sh&quot;" Condition="'$(OS)' != 'Windows_NT'" />
+    <Error Condition="'$(OS)' == 'Windows_NT'" Text="Download tailwindcss-windows-x64.exe into tools\tailwind\tailwindcss.exe (see scripts/get-tailwind.sh)." />
   </Target>
 
-  <Target Name="BuildTailwind" BeforeTargets="BeforeBuild"
-          Inputs="@(TailwindSource)" Outputs="$(TailwindOutput)">
+  <Target Name="BuildTailwind" BeforeTargets="BeforeBuild" Inputs="@(TailwindSource)" Outputs="$(TailwindOutput)">
     <MakeDir Directories="$(MSBuildThisFileDirectory)wwwroot\css" />
-    <Exec Command="&quot;$(TailwindExe)&quot; --input &quot;$(TailwindInput)&quot; --output &quot;$(TailwindOutput)&quot; --minify"
-          StandardOutputImportance="low" />
+    <Exec Command="&quot;$(TailwindExe)&quot; --input &quot;$(TailwindInput)&quot; --output &quot;$(TailwindOutput)&quot; --minify" StandardOutputImportance="low" />
   </Target>
 
 </Project>

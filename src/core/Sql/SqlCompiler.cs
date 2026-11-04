@@ -86,7 +86,7 @@ public sealed class SqlCompiler(DataCatalog catalog)
 
         sql.Append("LIMIT ").Append(governed.RowLimit.ToString(CultureInfo.InvariantCulture)).Append(';');
 
-        return new CompiledQuery(model.Key, query.Label, sql.ToString(), parameters, columns, model.Tables);
+        return new CompiledQuery(model.Key, query.Label, query.Chart, sql.ToString(), parameters, columns, model.Tables);
     }
 
     /// <summary>

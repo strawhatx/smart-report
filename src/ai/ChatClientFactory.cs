@@ -29,10 +29,18 @@ public static class ChatClientFactory
                 .GetChatClient(options.Model)
                 .AsIChatClient(),
 
-            // Ollama, LM Studio, vLLM, llama.cpp, Groq, OpenRouter, Together — anything that
-            // speaks the OpenAI chat API. A local server usually ignores the key; the SDK still
-            // insists on a non-empty one, so a placeholder is used rather than demanding a secret
-            // nobody needs.
+            // Groq's free tier: OpenAI-compatible, no card, and fast enough that the planning
+            // step does not feel like waiting. The base URL is fixed here so the only thing to
+            // configure is a key.
+            "groq" => new OpenAIClient(
+                    new ApiKeyCredential(RequireKey(options)),
+                    new OpenAIClientOptions { Endpoint = new Uri("https://api.groq.com/openai/v1") })
+                .GetChatClient(options.Model)
+                .AsIChatClient(),
+
+            // Ollama, LM Studio, vLLM, llama.cpp, OpenRouter, Together — anything that speaks the
+            // OpenAI chat API. A local server usually ignores the key; the SDK still insists on a
+            // non-empty one, so a placeholder is used rather than demanding a secret nobody needs.
             "ollama" or "openai-compatible" => new OpenAIClient(
                     new ApiKeyCredential(string.IsNullOrWhiteSpace(options.ApiKey) ? "not-required" : options.ApiKey),
                     new OpenAIClientOptions { Endpoint = new Uri(options.BaseUrl) })
@@ -40,8 +48,8 @@ public static class ChatClientFactory
                 .AsIChatClient(),
 
             _ => throw new InvalidOperationException(
-                $"Unknown Ai:Provider '{options.Provider}'. Use scripted, anthropic, openai, ollama, "
-                + "or openai-compatible."),
+                $"Unknown Ai:Provider '{options.Provider}'. Use scripted, groq, anthropic, openai, "
+                + "ollama, or openai-compatible."),
         };
     }
 
