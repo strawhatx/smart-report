@@ -1,0 +1,73 @@
+@page "/portal/library"
+@model SmartReport.App.Pages.Portal.LibraryModel
+@{
+    Layout = "_PortalLayout";
+}
+
+@if (Model.Principal is null)
+{
+    <div class="grid flex-1 place-items-center p-10 text-center">
+        <p class="max-w-sm text-ink-soft">Pick a user above to sign in to the Trailhead Coffee portal.</p>
+    </div>
+}
+else
+{
+<div class="min-h-0 flex-1 overflow-y-auto">
+  <div class="mx-auto max-w-5xl px-4 py-7 sm:px-7">
+
+    <section>
+        <h1 class="text-[clamp(1.35rem,3vw,1.6rem)] font-bold leading-tight">Start from a template</h1>
+        <p class="mt-1.5 text-[15px] text-ink-soft">
+            Questions Smart Reports already knows how to answer. Opening one asks it against
+            @Model.Principal.ClientName's data.
+        </p>
+
+        <ul class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            @foreach (var template in Model.Templates)
+            {
+                <li>
+                    <a href="/portal/reports?template=@template.Id"
+                       class="flex h-full flex-col rounded-xl border border-rule bg-surface p-4 transition hover:border-ink-faint hover:shadow-sm">
+                        <span class="label-mono">@template.Category</span>
+                        <span class="mt-2.5 font-semibold leading-snug">@template.Title</span>
+                        <span class="mt-2 text-[13.5px] leading-6 text-ink-soft">@template.Question</span>
+                    </a>
+                </li>
+            }
+        </ul>
+    </section>
+
+    <section class="mt-12">
+        <h2 class="text-[1.1rem] font-bold">Your saved reports</h2>
+        <p class="mt-1.5 text-[15px] text-ink-soft">
+            Only yours. The database scopes these to your account and to you — this page does no
+            filtering of its own.
+        </p>
+
+        @if (Model.Saved.Count == 0)
+        {
+            <p class="mt-5 rounded-xl border border-dashed border-rule-strong p-6 text-[15px] text-ink-faint">
+                Nothing saved yet. Build a report and choose <span class="font-semibold text-ink-soft">Save report</span>.
+            </p>
+        }
+        else
+        {
+            <ul class="mt-5 divide-y divide-rule rounded-xl border border-rule bg-surface">
+                @foreach (var saved in Model.Saved)
+                {
+                    <li>
+                        <a href="/portal/reports?saved=@saved.Id"
+                           class="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3.5 hover:bg-paper">
+                            <span class="font-semibold">@saved.Title</span>
+                            <span class="text-[13.5px] text-ink-soft">@saved.Question</span>
+                            <span class="label-mono ml-auto">@saved.UpdatedAt.ToString("d MMM yyyy")</span>
+                        </a>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+  </div>
+</div>
+}

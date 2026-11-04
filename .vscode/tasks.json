@@ -1,0 +1,44 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "command": "dotnet",
+      "type": "process",
+      "args": ["build", "${workspaceFolder}/SmartReport.slnx", "-v", "q", "--nologo"],
+      "problemMatcher": "$msCompile",
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "test",
+      "command": "dotnet",
+      "type": "process",
+      "args": ["test", "${workspaceFolder}/tests/SmartReport.Tests.csproj", "--nologo"],
+      "problemMatcher": "$msCompile",
+      "group": { "kind": "test", "isDefault": true }
+    },
+    {
+      // The app migrates and seeds itself on startup, but it needs Postgres to be up first.
+      "label": "db: up",
+      "command": "docker",
+      "type": "process",
+      "args": ["compose", "-f", "docker-compose.local.yml", "up", "-d"],
+      "problemMatcher": []
+    },
+    {
+      "label": "db: down",
+      "command": "docker",
+      "type": "process",
+      "args": ["compose", "-f", "docker-compose.local.yml", "down"],
+      "problemMatcher": []
+    },
+    {
+      // Destroys the volume as well — use when a migration changed and you want a clean seed.
+      "label": "db: reset (destroys data)",
+      "command": "docker",
+      "type": "process",
+      "args": ["compose", "-f", "docker-compose.local.yml", "down", "-v"],
+      "problemMatcher": []
+    }
+  ]
+}

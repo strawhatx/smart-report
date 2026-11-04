@@ -435,3 +435,7 @@ FodyWeavers.xsd
 appsettings.Development.json
 appsettings.Local.json
 appsettings.*.local.json
+
+# --- Smart Report: generated front-end assets
+tools/tailwind/
+src/app/wwwroot/css/app.css

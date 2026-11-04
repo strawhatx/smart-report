@@ -5,20 +5,19 @@ using Xunit;
 namespace SmartReport.Tests;
 
 /// <summary>
-/// Row-level security, tested against a real PostgreSQL with the real policies.
+/// Row-level security against a real PostgreSQL with the real policies.
 ///
 /// <para>
-/// These assert the guarantee the product rests on: the database, not the application, decides
-/// which rows a principal may see. Every query here is a bare <c>SELECT count(*)</c> with no
-/// <c>WHERE</c> clause of its own — whatever filtering happens is the policy's doing.
+/// Every query here is a bare <c>SELECT count(*)</c> with no <c>WHERE</c> of its own, so whatever
+/// filtering happens is the database's doing, not the test's.
 /// </para>
 /// </summary>
 [Collection(PostgresCollection.Name)]
 public sealed class RlsTests(PostgresFixture fixture)
 {
-    private async Task<long> CountAsync(string table, string? role, int? regionId, string principal = "dana")
+    private async Task<long> CountAsync(string table, string? role, int? clientId, string principal = "dana")
     {
-        var (connection, transaction) = await fixture.OpenAsAsync(principal, role, regionId);
+        var (connection, transaction) = await fixture.OpenAsAsync(principal, role, clientId);
         await using var _ = connection;
         await using var __ = transaction;
 
@@ -27,91 +26,38 @@ public sealed class RlsTests(PostgresFixture fixture)
         return (long)(await command.ExecuteScalarAsync())!;
     }
 
-    [Fact]
-    public async Task An_unconfigured_connection_sees_nothing()
-    {
-        // The failure mode that matters most. current_setting(…, true) returns NULL when unset,
-        // so a policy that forgot to check for NULL would return every row here.
-        Assert.Equal(0, await CountAsync("orders", role: null, regionId: null));
-        Assert.Equal(0, await CountAsync("compensation", role: null, regionId: null));
-        Assert.Equal(0, await CountAsync("attrition_events", role: null, regionId: null));
-    }
-
-    [Fact]
-    public async Task An_analyst_sees_every_region()
-    {
-        var all = await CountAsync("orders", Roles.Analyst, regionId: null);
-        Assert.True(all > 0, "The seed should have produced orders.");
-    }
-
-    [Fact]
-    public async Task A_regional_manager_sees_strictly_fewer_rows_than_an_analyst()
-    {
-        var all = await CountAsync("orders", Roles.Analyst, regionId: null);
-        var scoped = await CountAsync("orders", Roles.RegionalManager, regionId: 1, principal: "marcus");
-
-        Assert.True(scoped > 0, "The North region should have orders.");
-        Assert.True(scoped < all, $"Expected scoping to reduce {all} rows; got {scoped}.");
-    }
-
-    [Fact]
-    public async Task A_regional_manager_without_a_region_sees_nothing_rather_than_everything()
-    {
-        Assert.Equal(0, await CountAsync("orders", Roles.RegionalManager, regionId: null, principal: "marcus"));
-    }
-
-    [Fact]
-    public async Task Line_items_are_scoped_the_same_way_as_their_orders()
-    {
-        var all = await CountAsync("order_items", Roles.Analyst, regionId: null);
-        var scoped = await CountAsync("order_items", Roles.RegionalManager, regionId: 1, principal: "marcus");
-
-        Assert.True(scoped < all);
-    }
-
     [Theory]
-    [InlineData(Roles.Analyst, null)]
-    [InlineData(Roles.RegionalManager, 1)]
-    public async Task Compensation_is_invisible_to_everyone_but_hr(string role, int? regionId)
+    [InlineData("orders")]
+    [InlineData("shipments")]
+    [InlineData("products")]
+    [InlineData("fees")]
+    [InlineData("benchmark_metrics")]
+    [InlineData("report_templates")]
+    public async Task An_unconfigured_connection_sees_nothing(string table)
     {
-        Assert.Equal(0, await CountAsync("compensation", role, regionId));
+        // The failure that matters most. set_config cannot store NULL, so "unset" arrives as an
+        // empty string — a policy checking only IS NOT NULL would wave this straight through.
+        Assert.Equal(0, await CountAsync(table, role: null, clientId: null));
     }
 
     [Fact]
-    public async Task Compensation_is_visible_to_hr()
+    public async Task A_role_without_a_client_sees_nothing()
     {
-        Assert.True(await CountAsync("compensation", Roles.HrDirector, regionId: null, principal: "priya") > 0);
+        Assert.Equal(0, await CountAsync("orders", Roles.Coordinator, clientId: null));
+        Assert.Equal(0, await CountAsync("shipments", Roles.AccountOwner, clientId: null));
     }
 
     [Fact]
-    public async Task Saved_reports_are_owner_only()
+    public async Task A_configured_client_sees_its_own_rows()
     {
-        var owned = await CountAsync("saved_reports", Roles.Analyst, null, principal: "dana");
-        var total = await TotalAsOwnerAsync("saved_reports");
-
-        Assert.True(owned > 0, "Dana should have saved reports.");
-        Assert.True(owned < total, $"Dana saw all {total} rows — the owner-only policy is not applying.");
-    }
-
-    [Fact]
-    public async Task A_cross_region_query_written_by_hand_still_returns_nothing()
-    {
-        // Even a deliberately hostile query cannot reach another region's rows, because the
-        // policy is applied by the database after the predicate, not before it.
-        var (connection, transaction) = await fixture.OpenAsAsync("marcus", Roles.RegionalManager, 1);
-        await using var _ = connection;
-        await using var __ = transaction;
-
-        await using var command = new NpgsqlCommand(
-            "SELECT count(*) FROM orders WHERE region_id <> 1", connection, transaction);
-
-        Assert.Equal(0L, (long)(await command.ExecuteScalarAsync())!);
+        Assert.True(await CountAsync("orders", Roles.Coordinator, TestPrincipals.TrailheadId) > 0);
+        Assert.True(await CountAsync("shipments", Roles.Coordinator, TestPrincipals.TrailheadId) > 0);
     }
 
     [Fact]
     public async Task The_application_role_cannot_write()
     {
-        var (connection, transaction) = await fixture.OpenAsAsync("dana", Roles.Analyst, null);
+        var (connection, transaction) = await fixture.OpenAsAsync("dana", Roles.Coordinator, TestPrincipals.TrailheadId);
         await using var _ = connection;
         await using var __ = transaction;
 
@@ -121,11 +67,17 @@ public sealed class RlsTests(PostgresFixture fixture)
         Assert.Equal("42501", error.SqlState); // insufficient_privilege
     }
 
-    private async Task<long> TotalAsOwnerAsync(string table)
+    [Fact]
+    public async Task You_can_always_read_your_own_user_row_so_the_app_can_bootstrap()
     {
-        await using var owner = new NpgsqlConnection(fixture.OwnerConnectionString);
-        await owner.OpenAsync();
-        await using var command = new NpgsqlCommand($"SELECT count(*) FROM {table}", owner);
-        return (long)(await command.ExecuteScalarAsync())!;
+        // With no role set, client_users must still return exactly one row — otherwise resolving
+        // a principal would need an owner connection, which request handling must never use (D4).
+        var (connection, transaction) = await fixture.OpenAsAsync("dana", role: null, clientId: null);
+        await using var _ = connection;
+        await using var __ = transaction;
+
+        await using var command = new NpgsqlCommand("SELECT count(*) FROM client_users", connection, transaction);
+
+        Assert.Equal(1L, (long)(await command.ExecuteScalarAsync())!);
     }
 }

@@ -24,8 +24,8 @@ public class PlannerContractTests
     public void A_sql_injection_attempt_in_a_metric_key_is_rejected_as_an_unknown_metric()
     {
         var result = ParseAndValidate("""
-            {"title":"x","queries":[{"model":"sales","metrics":["'; DROP TABLE orders; --"],
-             "dimensions":["region"],"filters":[]}]}
+            {"title":"x","queries":[{"model":"shipping","metrics":["'; DROP TABLE orders; --"],
+             "dimensions":["carrier"],"filters":[]}]}
             """);
 
         Assert.False(result.IsValid);
@@ -36,7 +36,7 @@ public class PlannerContractTests
     public void An_invented_model_is_rejected()
     {
         var result = ParseAndValidate("""
-            {"queries":[{"model":"pg_catalog.pg_user","metrics":["revenue"],"dimensions":[]}]}
+            {"queries":[{"model":"pg_catalog.pg_user","metrics":["orders_shipped"],"dimensions":[]}]}
             """);
 
         Assert.False(result.IsValid);
@@ -61,19 +61,19 @@ public class PlannerContractTests
         var parsed = PlannerJson.Parse("""
             Sure! Here's the plan:
             ```json
-            {"title":"Revenue","queries":[{"model":"sales","metrics":["revenue"],"dimensions":["region"]}]}
+            {"title":"Revenue","queries":[{"model":"shipping","metrics":["orders_shipped"],"dimensions":["carrier"]}]}
             ```
             """);
 
         Assert.NotNull(parsed.Spec);
-        Assert.Equal("sales", parsed.Spec!.Queries[0].Model);
+        Assert.Equal("shipping", parsed.Spec!.Queries[0].Model);
     }
 
     [Fact]
     public void A_single_query_envelope_is_accepted_as_well_as_a_list()
     {
         var parsed = PlannerJson.Parse("""
-            {"title":"Revenue","model":"sales","metrics":["revenue"],"dimensions":["region"]}
+            {"title":"Revenue","model":"shipping","metrics":["orders_shipped"],"dimensions":["carrier"]}
             """);
 
         Assert.NotNull(parsed.Spec);
@@ -92,7 +92,7 @@ public class PlannerContractTests
     [Fact]
     public void A_missing_model_name_becomes_an_unknown_model_rather_than_a_guess()
     {
-        var result = ParseAndValidate("""{"queries":[{"metrics":["revenue"],"dimensions":[]}]}""");
+        var result = ParseAndValidate("""{"queries":[{"metrics":["orders_shipped"],"dimensions":[]}]}""");
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Problems, p => p.Kind == SpecProblemKind.UnknownModel);
@@ -102,7 +102,7 @@ public class PlannerContractTests
     public void An_enormous_limit_is_clamped_rather_than_honoured()
     {
         var result = ParseAndValidate("""
-            {"queries":[{"model":"sales","metrics":["revenue"],"dimensions":["region"],"limit":999999999}]}
+            {"queries":[{"model":"shipping","metrics":["orders_shipped"],"dimensions":["carrier"],"limit":999999999}]}
             """);
 
         Assert.True(result.IsValid);
@@ -115,8 +115,8 @@ public class PlannerContractTests
         // The validator accepts it — it is a legal string — and the compiler binds it. The
         // SqlCompiler tests assert it never becomes SQL text.
         var result = ParseAndValidate("""
-            {"queries":[{"model":"sales","metrics":["revenue"],"dimensions":["region"],
-             "filters":[{"field":"region","op":"eq","values":["North' OR 1=1 --"]}]}]}
+            {"queries":[{"model":"shipping","metrics":["orders_shipped"],"dimensions":["carrier"],
+             "filters":[{"field":"carrier","op":"eq","values":["North' OR 1=1 --"]}]}]}
             """);
 
         Assert.True(result.IsValid);

@@ -1,19 +1,21 @@
 namespace SmartReport.Data;
 
 /// <summary>
-/// The seeded demo identities.
+/// The two seeded identities the demo can sign in as — both at Trailhead Coffee Co.
 ///
 /// <para>
-/// These exist so the development sign-in switcher has something to offer and so the test suite
-/// can assert on three concretely different permission shapes. They are demo data, not an access
-/// control list — authority still comes from each employee's row (A5).
+/// They contrast <i>roles</i>, not companies. A cross-company switch proves only what every
+/// reviewer already assumes; a coordinator being refused the invoice, and told who can grant it,
+/// shows a rule with a reason and a way forward.
 /// </para>
 /// </summary>
 public static class DemoPrincipals
 {
-    public const string Analyst = "dana";
-    public const string RegionalManager = "marcus";
-    public const string HrDirector = "priya";
+    /// <summary>Dana Whitfield. Operations, but not billing.</summary>
+    public const string Coordinator = "dana";
 
-    public static readonly IReadOnlyList<string> Keys = [Analyst, RegionalManager, HrDirector];
+    /// <summary>Priya Shah. Owns the account, so the invoice is hers.</summary>
+    public const string AccountOwner = "priya";
+
+    public static readonly IReadOnlyList<string> Keys = [Coordinator, AccountOwner];
 }

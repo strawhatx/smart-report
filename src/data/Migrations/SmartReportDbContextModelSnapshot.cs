@@ -22,88 +22,101 @@ namespace SmartReport.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("SmartReport.Data.Entities.AttritionEvent", b =>
+            modelBuilder.Entity("SmartReport.Data.Entities.BenchmarkMetric", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("DepartmentId")
+                    b.Property<int>("ClientCount")
                         .HasColumnType("integer")
-                        .HasColumnName("department_id");
+                        .HasColumnName("client_count");
 
-                    b.Property<DateOnly>("EventDate")
-                        .HasColumnType("date")
-                        .HasColumnName("event_date");
+                    b.Property<string>("DimensionKey")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("dimension_key");
 
-                    b.Property<string>("Reason")
+                    b.Property<string>("DimensionValue")
                         .IsRequired()
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)")
-                        .HasColumnName("reason");
+                        .HasColumnName("dimension_value");
 
-                    b.Property<int>("RegionId")
-                        .HasColumnType("integer")
-                        .HasColumnName("region_id");
+                    b.Property<string>("MetricKey")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("metric_key");
 
-                    b.Property<decimal>("ReplacementCost")
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("replacement_cost");
+                    b.Property<decimal>("P25")
+                        .HasPrecision(10, 3)
+                        .HasColumnType("numeric(10,3)")
+                        .HasColumnName("p25");
+
+                    b.Property<decimal>("P50")
+                        .HasPrecision(10, 3)
+                        .HasColumnType("numeric(10,3)")
+                        .HasColumnName("p50");
+
+                    b.Property<decimal>("P75")
+                        .HasPrecision(10, 3)
+                        .HasColumnType("numeric(10,3)")
+                        .HasColumnName("p75");
+
+                    b.Property<DateOnly>("PeriodMonth")
+                        .HasColumnType("date")
+                        .HasColumnName("period_month");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RegionId", "EventDate");
+                    b.HasIndex("MetricKey", "PeriodMonth");
 
-                    b.ToTable("attrition_events");
+                    b.ToTable("benchmark_metrics");
                 });
 
-            modelBuilder.Entity("SmartReport.Data.Entities.Compensation", b =>
+            modelBuilder.Entity("SmartReport.Data.Entities.CarrierContractRate", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    b.Property<string>("Carrier")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("carrier");
 
-                    b.Property<decimal>("AnnualSalary")
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("annual_salary");
+                    b.Property<decimal>("CostPerLabel")
+                        .HasPrecision(8, 3)
+                        .HasColumnType("numeric(8,3)")
+                        .HasColumnName("cost_per_label");
 
                     b.Property<DateOnly>("EffectiveFrom")
                         .HasColumnType("date")
                         .HasColumnName("effective_from");
 
-                    b.Property<int>("EmployeeId")
-                        .HasColumnType("integer")
-                        .HasColumnName("employee_id");
-
-                    b.Property<int>("RegionId")
-                        .HasColumnType("integer")
-                        .HasColumnName("region_id");
+                    b.Property<string>("Service")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("service");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("EmployeeId");
-
-                    b.HasIndex("RegionId");
-
-                    b.ToTable("compensation");
+                    b.ToTable("carrier_contract_rates");
                 });
 
-            modelBuilder.Entity("SmartReport.Data.Entities.Customer", b =>
+            modelBuilder.Entity("SmartReport.Data.Entities.Client", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    b.Property<DateOnly>("JoinedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("joined_on");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -111,49 +124,29 @@ namespace SmartReport.Data.Migrations
                         .HasColumnType("character varying(120)")
                         .HasColumnName("name");
 
-                    b.Property<int>("RegionId")
-                        .HasColumnType("integer")
-                        .HasColumnName("region_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RegionId");
-
-                    b.ToTable("customers");
-                });
-
-            modelBuilder.Entity("SmartReport.Data.Entities.Department", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Name")
+                    b.Property<string>("Slug")
                         .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)")
-                        .HasColumnName("name");
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("slug");
 
                     b.HasKey("Id");
 
-                    b.ToTable("departments");
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.ToTable("clients");
                 });
 
-            modelBuilder.Entity("SmartReport.Data.Entities.Employee", b =>
+            modelBuilder.Entity("SmartReport.Data.Entities.ClientUser", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("DepartmentId")
+                    b.Property<int>("ClientId")
                         .HasColumnType("integer")
-                        .HasColumnName("department_id");
+                        .HasColumnName("client_id");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -167,22 +160,20 @@ namespace SmartReport.Data.Migrations
                         .HasColumnType("character varying(120)")
                         .HasColumnName("full_name");
 
-                    b.Property<DateOnly>("HiredOn")
-                        .HasColumnType("date")
-                        .HasColumnName("hired_on");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
+
+                    b.Property<string>("JobTitle")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("job_title");
 
                     b.Property<string>("PrincipalKey")
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
                         .HasColumnName("principal_key");
-
-                    b.Property<int>("RegionId")
-                        .HasColumnType("integer")
-                        .HasColumnName("region_id");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -192,66 +183,73 @@ namespace SmartReport.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ClientId");
+
                     b.HasIndex("PrincipalKey")
                         .IsUnique();
 
-                    b.HasIndex("RegionId");
-
-                    b.ToTable("employees");
+                    b.ToTable("client_users");
                 });
 
-            modelBuilder.Entity("SmartReport.Data.Entities.HeadcountMonthly", b =>
+            modelBuilder.Entity("SmartReport.Data.Entities.Fee", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("amount");
 
-                    b.Property<int>("DepartmentId")
+                    b.Property<int>("ClientId")
                         .HasColumnType("integer")
-                        .HasColumnName("department_id");
+                        .HasColumnName("client_id");
 
-                    b.Property<int>("Headcount")
-                        .HasColumnType("integer")
-                        .HasColumnName("headcount");
+                    b.Property<string>("FeeType")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("fee_type");
 
-                    b.Property<DateOnly>("Month")
+                    b.Property<DateOnly>("PeriodMonth")
                         .HasColumnType("date")
-                        .HasColumnName("month");
-
-                    b.Property<int>("RegionId")
-                        .HasColumnType("integer")
-                        .HasColumnName("region_id");
+                        .HasColumnName("period_month");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RegionId", "Month");
+                    b.HasIndex("ClientId", "PeriodMonth");
 
-                    b.ToTable("headcount_monthly");
+                    b.ToTable("fees");
                 });
 
             modelBuilder.Entity("SmartReport.Data.Entities.Order", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("channel");
 
-                    b.Property<int>("CustomerId")
+                    b.Property<int>("ClientId")
                         .HasColumnType("integer")
-                        .HasColumnName("customer_id");
+                        .HasColumnName("client_id");
 
                     b.Property<DateTime>("OrderedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("ordered_at");
 
-                    b.Property<int>("RegionId")
-                        .HasColumnType("integer")
-                        .HasColumnName("region_id");
+                    b.Property<DateTime>("PromisedShipAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("promised_ship_at");
+
+                    b.Property<DateTime?>("ShippedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("shipped_at");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -261,133 +259,144 @@ namespace SmartReport.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("RegionId", "OrderedAt");
+                    b.HasIndex("ClientId", "OrderedAt");
 
                     b.ToTable("orders");
                 });
 
             modelBuilder.Entity("SmartReport.Data.Entities.OrderItem", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("OrderId")
+                    b.Property<int>("ClientId")
                         .HasColumnType("integer")
+                        .HasColumnName("client_id");
+
+                    b.Property<long>("OrderId")
+                        .HasColumnType("bigint")
                         .HasColumnName("order_id");
 
-                    b.Property<int>("ProductId")
-                        .HasColumnType("integer")
+                    b.Property<long>("ProductId")
+                        .HasColumnType("bigint")
                         .HasColumnName("product_id");
 
                     b.Property<int>("Quantity")
                         .HasColumnType("integer")
                         .HasColumnName("quantity");
 
-                    b.Property<int>("RegionId")
-                        .HasColumnType("integer")
-                        .HasColumnName("region_id");
-
-                    b.Property<decimal>("UnitPrice")
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("unit_price");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("OrderId");
-
-                    b.HasIndex("RegionId");
+                    b.HasIndex("ClientId", "OrderId");
 
                     b.ToTable("order_items");
                 });
 
             modelBuilder.Entity("SmartReport.Data.Entities.Product", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Category")
-                        .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)")
-                        .HasColumnName("category");
+                    b.Property<int>("ClientId")
+                        .HasColumnType("integer")
+                        .HasColumnName("client_id");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)")
+                        .HasMaxLength(140)
+                        .HasColumnType("character varying(140)")
                         .HasColumnName("name");
 
-                    b.Property<decimal>("UnitPrice")
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("unit_price");
+                    b.Property<int>("OnHand")
+                        .HasColumnType("integer")
+                        .HasColumnName("on_hand");
+
+                    b.Property<int>("ReorderPoint")
+                        .HasColumnType("integer")
+                        .HasColumnName("reorder_point");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("sku");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
 
                     b.ToTable("products");
                 });
 
-            modelBuilder.Entity("SmartReport.Data.Entities.Program", b =>
+            modelBuilder.Entity("SmartReport.Data.Entities.ReportTemplate", b =>
                 {
                     b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("category");
 
-                    b.Property<decimal>("BudgetAmount")
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("budget_amount");
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)")
+                        .HasColumnName("question");
 
-                    b.Property<int>("FiscalYear")
+                    b.Property<int>("SortOrder")
                         .HasColumnType("integer")
-                        .HasColumnName("fiscal_year");
+                        .HasColumnName("sort_order");
 
-                    b.Property<string>("Name")
+                    b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
-                        .HasColumnName("name");
-
-                    b.Property<decimal>("SpendAmount")
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("spend_amount");
+                        .HasColumnName("title");
 
                     b.HasKey("Id");
 
-                    b.ToTable("programs");
+                    b.ToTable("report_templates");
                 });
 
-            modelBuilder.Entity("SmartReport.Data.Entities.Region", b =>
+            modelBuilder.Entity("SmartReport.Data.Entities.Return", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                    b.Property<int>("ClientId")
+                        .HasColumnType("integer")
+                        .HasColumnName("client_id");
 
-                    b.Property<string>("Name")
+                    b.Property<long>("OrderId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("Reason")
                         .IsRequired()
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)")
-                        .HasColumnName("name");
+                        .HasColumnName("reason");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<decimal>("RefundAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("refund_amount");
 
                     b.HasKey("Id");
 
-                    b.ToTable("regions");
+                    b.HasIndex("ClientId", "ReceivedAt");
+
+                    b.ToTable("returns");
                 });
 
             modelBuilder.Entity("SmartReport.Data.Entities.SavedReport", b =>
@@ -396,6 +405,10 @@ namespace SmartReport.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<int>("ClientId")
+                        .HasColumnType("integer")
+                        .HasColumnName("client_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -413,11 +426,6 @@ namespace SmartReport.Data.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("question");
 
-                    b.Property<string>("SpecJson")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("spec_json");
-
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(160)
@@ -430,9 +438,59 @@ namespace SmartReport.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OwnerKey");
+                    b.HasIndex("ClientId", "OwnerKey");
 
                     b.ToTable("saved_reports");
+                });
+
+            modelBuilder.Entity("SmartReport.Data.Entities.Shipment", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("BilledAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasColumnName("billed_amount");
+
+                    b.Property<string>("Carrier")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("carrier");
+
+                    b.Property<int>("ClientId")
+                        .HasColumnType("integer")
+                        .HasColumnName("client_id");
+
+                    b.Property<DateTime?>("DeliveredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("delivered_at");
+
+                    b.Property<bool>("IsLate")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_late");
+
+                    b.Property<long>("OrderId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("Service")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("service");
+
+                    b.Property<DateTime>("ShippedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("shipped_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId", "ShippedAt");
+
+                    b.ToTable("shipments");
                 });
 #pragma warning restore 612, 618
         }

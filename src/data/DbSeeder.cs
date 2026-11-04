@@ -1,305 +1,274 @@
 using Microsoft.EntityFrameworkCore;
-using SmartReport.Core.Policy;
+using Npgsql;
+using NpgsqlTypes;
 using SmartReport.Data.Entities;
 
 namespace SmartReport.Data;
 
 /// <summary>
-/// Fills an empty database with the demo company.
+/// Fills an empty database with Northpoint and its clients.
 ///
 /// <para>
-/// Runs on the <b>owner</b> connection, which is one of the two places that is correct (D4) —
-/// the application role has SELECT only, so it could not write this even if asked to.
+/// Runs on the <b>owner</b> connection — one of the two places that is correct (D4). The
+/// application role has SELECT only, so it could not write this even if asked to.
 /// </para>
 /// <para>
-/// Everything is generated from a fixed seed, so the numbers in the demo are the same on every
-/// machine and a screenshot stays true.
+/// Reference tables go through EF. The ~430,000 operational rows go through <c>COPY</c>: Trailhead
+/// has twenty-two months of real orders so that every figure in the report is a genuine
+/// aggregation rather than a number typed into the UI, and EF's change tracker is the wrong tool
+/// for that volume.
 /// </para>
 /// </summary>
 public static class DbSeeder
 {
-    private const int Seed = 20261103;
-
-    /// <summary>The data ends here rather than at "now", so the demo reads the same next month.</summary>
-    private static readonly DateOnly AsOf = new(2026, 10, 31);
-
-    private static readonly string[] DepartmentNames =
-        ["Engineering", "Sales", "Customer Success", "People Ops", "Finance", "Marketing"];
-
-    private static readonly string[] RegionNames = ["North", "South", "East"];
-
-    private static readonly string[] AttritionReasons =
-        ["Resigned", "Better offer", "Relocation", "Retirement", "Performance", "Redundancy"];
-
-    private static readonly string[] OrderStatuses = ["fulfilled", "fulfilled", "fulfilled", "pending", "cancelled"];
-
-    private static readonly (string Name, string Category, decimal Price)[] ProductCatalog =
-    [
-        ("Atlas Starter", "Platform", 1_200m), ("Atlas Pro", "Platform", 4_800m),
-        ("Atlas Enterprise", "Platform", 18_000m), ("Beacon Analytics", "Analytics", 3_600m),
-        ("Beacon Reporting", "Analytics", 2_400m), ("Beacon Forecast", "Analytics", 5_200m),
-        ("Relay Connect", "Integration", 900m), ("Relay Sync", "Integration", 1_800m),
-        ("Relay Gateway", "Integration", 6_400m), ("Sentry Audit", "Security", 2_900m),
-        ("Sentry Vault", "Security", 7_300m), ("Sentry Watch", "Security", 4_100m),
-        ("Onboarding Package", "Services", 2_000m), ("Migration Package", "Services", 8_500m),
-        ("Support Standard", "Services", 1_100m), ("Support Premium", "Services", 3_300m),
-    ];
-
     public static async Task SeedAsync(SmartReportDbContext db, CancellationToken cancellationToken = default)
     {
-        // Each block checks for itself rather than one early return for the whole method, so a
-        // database seeded before a block existed still picks it up on the next start.
-        if (!await db.SavedReports.AnyAsync(cancellationToken))
-        {
-            db.SavedReports.AddRange(BuildSavedReports());
-            await db.SaveChangesAsync(cancellationToken);
-        }
-
-        if (await db.Regions.AnyAsync(cancellationToken))
+        if (await db.Clients.AnyAsync(cancellationToken))
         {
             return;
         }
 
-        var random = new Random(Seed);
+        var random = new Random(SeedPlan.Seed);
 
-        var regions = RegionNames.Select(n => new Region { Name = n }).ToArray();
-        db.Regions.AddRange(regions);
+        var clients = BuildClients();
+        db.Clients.AddRange(clients);
+        db.ClientUsers.AddRange(BuildUsers());
+        db.ReportTemplates.AddRange(BuildTemplates());
+        db.CarrierContractRates.AddRange(BuildCarrierRates());
+        db.BenchmarkMetrics.AddRange(BuildBenchmarks());
 
-        var departments = DepartmentNames.Select(n => new Department { Name = n }).ToArray();
-        db.Departments.AddRange(departments);
+        var trailhead = clients.Single(c => c.Slug == SeedPlan.TrailheadSlug);
+        var bluefin = clients.Single(c => c.Slug == SeedPlan.BluefinSlug);
 
-        var products = ProductCatalog
-            .Select(p => new Product { Name = p.Name, Category = p.Category, UnitPrice = p.Price })
-            .ToArray();
+        var products = BuildProducts(trailhead.Id, bluefin.Id);
         db.Products.AddRange(products);
+        db.Fees.AddRange(BuildFees(trailhead.Id, bluefin.Id));
 
         await db.SaveChangesAsync(cancellationToken);
 
-        var employees = BuildEmployees(random, regions, departments);
-        db.Employees.AddRange(employees);
-        await db.SaveChangesAsync(cancellationToken);
+        // Operational rows: Trailhead in full, Bluefin small but real so the isolation tests have
+        // something that would actually show up if a policy were wrong.
+        var connectionString = db.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("The seeder needs the owner connection string.");
 
-        db.Compensation.AddRange(BuildCompensation(random, employees));
-        db.HeadcountMonthly.AddRange(BuildHeadcount(random, regions, departments));
-        db.AttritionEvents.AddRange(BuildAttrition(random, regions, departments));
-        db.Programs.AddRange(BuildPrograms());
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
 
-        var customers = BuildCustomers(random, regions);
-        db.Customers.AddRange(customers);
-        await db.SaveChangesAsync(cancellationToken);
+        var writer = new OperationalWriter(connection, random);
+        await writer.WriteClientAsync(trailhead.Id, SeedPlan.Volume2025, SeedPlan.Volume2026,
+            products.Where(p => p.ClientId == trailhead.Id).Select(p => p.Id).ToArray(),
+            isHeadline: true, cancellationToken);
 
-        var orders = BuildOrders(random, customers);
-        db.Orders.AddRange(orders);
-        await db.SaveChangesAsync(cancellationToken);
-
-        db.OrderItems.AddRange(BuildOrderItems(random, orders, products));
-        await db.SaveChangesAsync(cancellationToken);
+        await writer.WriteClientAsync(bluefin.Id, [420, 390, 450, 470, 500, 510, 530, 560, 600, 640],
+            [560, 540, 600, 630, 660, 650, 700, 740, 790, 850],
+            products.Where(p => p.ClientId == bluefin.Id).Select(p => p.Id).ToArray(),
+            isHeadline: false, cancellationToken);
     }
 
-    private static List<Employee> BuildEmployees(Random random, Region[] regions, Department[] departments)
+    private static List<Client> BuildClients()
     {
-        string[] first =
-        [
-            "Dana", "Marcus", "Priya", "Tomas", "Aisha", "Ingrid", "Omar", "Lena", "Kofi", "Mira",
-            "Johan", "Yuki", "Rafael", "Nadia", "Elias", "Sofia", "Hassan", "Clara", "Dmitri", "Amara",
-        ];
-        string[] last =
-        [
-            "Okafor", "Lindqvist", "Raman", "Novak", "Haddad", "Berg", "Diallo", "Moreau", "Mensah",
-            "Patel", "Virtanen", "Tanaka", "Costa", "Rahman", "Lindgren", "Rossi", "Yilmaz", "Dubois",
-        ];
-
-        var employees = new List<Employee>();
-
-        // The three demo identities come first so their ids are stable and legible.
-        employees.Add(MakeEmployee("Dana Okafor", Roles.Analyst, DemoPrincipals.Analyst,
-            departments[1].Id, regions[0].Id, new DateOnly(2022, 3, 14)));
-        employees.Add(MakeEmployee("Marcus Lindqvist", Roles.RegionalManager, DemoPrincipals.RegionalManager,
-            departments[1].Id, regions[0].Id, new DateOnly(2021, 8, 2)));
-        employees.Add(MakeEmployee("Priya Raman", Roles.HrDirector, DemoPrincipals.HrDirector,
-            departments[3].Id, regions[1].Id, new DateOnly(2020, 1, 20)));
-
-        for (var i = 0; i < 137; i++)
+        var clients = new List<Client>
         {
-            var name = $"{first[random.Next(first.Length)]} {last[random.Next(last.Length)]}";
-            employees.Add(MakeEmployee(
-                name,
-                Roles.Analyst,
-                principalKey: null,
-                departments[random.Next(departments.Length)].Id,
-                regions[random.Next(regions.Length)].Id,
-                new DateOnly(2019 + random.Next(7), 1 + random.Next(12), 1 + random.Next(28))));
+            new() { Id = 1, Name = "Trailhead Coffee Co.", Slug = SeedPlan.TrailheadSlug, JoinedOn = new DateOnly(2024, 6, 3) },
+        };
+
+        var id = 2;
+        foreach (var name in SeedPlan.OtherClientNames)
+        {
+            var slug = name.ToLowerInvariant().Replace(" & ", "-").Replace(' ', '-').Replace(".", "");
+            clients.Add(new Client { Id = id++, Name = name, Slug = slug, JoinedOn = new DateOnly(2024, 1, 1).AddDays(id * 11) });
         }
 
-        return employees;
-
-        Employee MakeEmployee(string name, string role, string? principalKey, int departmentId, int regionId, DateOnly hired) =>
-            new()
-            {
-                FullName = name,
-                Email = name.ToLowerInvariant().Replace(' ', '.') + "@example.invalid",
-                Role = role,
-                PrincipalKey = principalKey,
-                DepartmentId = departmentId,
-                RegionId = regionId,
-                IsActive = true,
-                HiredOn = hired,
-            };
+        return clients;
     }
 
-    private static IEnumerable<Compensation> BuildCompensation(Random random, List<Employee> employees) =>
-        employees.Select(e => new Compensation
+    private static IEnumerable<ClientUser> BuildUsers() =>
+    [
+        // The two the demo signs in as. Same company, different authority — which is the point.
+        new()
         {
-            EmployeeId = e.Id,
-            RegionId = e.RegionId,
-            AnnualSalary = 48_000m + random.Next(0, 92) * 1_000m,
-            EffectiveFrom = new DateOnly(2026, 1, 1),
-        });
+            Id = 1, ClientId = 1, FullName = "Dana Whitfield", Email = "dana@trailheadcoffee.example",
+            Role = ClientRoles.Coordinator, JobTitle = "Warehouse Coordinator",
+            PrincipalKey = DemoPrincipals.Coordinator, IsActive = true,
+        },
+        new()
+        {
+            Id = 2, ClientId = 1, FullName = "Priya Shah", Email = "priya@trailheadcoffee.example",
+            Role = ClientRoles.AccountOwner, JobTitle = "Account Owner",
+            PrincipalKey = DemoPrincipals.AccountOwner, IsActive = true,
+        },
+        // Bluefin has people too. Not signable-in: they exist so the isolation tests are testing
+        // something real rather than an empty table.
+        new()
+        {
+            Id = 3, ClientId = 2, FullName = "Sam Oyelaran", Email = "sam@bluefinapparel.example",
+            Role = ClientRoles.AccountOwner, JobTitle = "Account Owner",
+            PrincipalKey = null, IsActive = true,
+        },
+    ];
 
-    private static IEnumerable<HeadcountMonthly> BuildHeadcount(Random random, Region[] regions, Department[] departments)
+    private static IEnumerable<ReportTemplate> BuildTemplates() =>
+    [
+        new() { Id = 1, Title = "October shipping report", Category = "Shipping", SortOrder = 1,
+            Question = "How did our orders ship in October? Show late shipments by carrier, orders by channel, and the trend." },
+        new() { Id = 2, Title = "Late shipments by carrier", Category = "Shipping", SortOrder = 2,
+            Question = "Show late shipments by carrier this month" },
+        new() { Id = 3, Title = "On-time rate vs peers", Category = "Benchmarks", SortOrder = 3,
+            Question = "How does our on-time rate compare to other Northpoint clients?" },
+        new() { Id = 4, Title = "Orders by sales channel", Category = "Orders", SortOrder = 4,
+            Question = "Break our orders down by sales channel" },
+        new() { Id = 5, Title = "What is running out", Category = "Inventory", SortOrder = 5,
+            Question = "Which products are low on stock?" },
+        new() { Id = 6, Title = "Returns by reason", Category = "Returns", SortOrder = 6,
+            Question = "Show returns by reason this quarter" },
+        new() { Id = 7, Title = "Monthly fees", Category = "Billing", SortOrder = 7,
+            Question = "Show our fees and invoice breakdown by month" },
+        new() { Id = 8, Title = "Cost per shipment", Category = "Shipping", SortOrder = 8,
+            Question = "What are we billed per shipment by carrier?" },
+    ];
+
+    private static IEnumerable<CarrierContractRate> BuildCarrierRates()
     {
-        for (var monthsBack = 23; monthsBack >= 0; monthsBack--)
+        long id = 1;
+        foreach (var (carrier, service, _, billed) in SeedPlan.CarrierMix)
         {
-            var month = new DateOnly(AsOf.Year, AsOf.Month, 1).AddMonths(-monthsBack);
-            foreach (var department in departments)
+            // Northpoint's margin lives in the gap between this and what the client is billed.
+            yield return new CarrierContractRate
             {
-                foreach (var region in regions)
+                Id = id++, Carrier = carrier, Service = service,
+                CostPerLabel = Math.Round(billed * 0.62m, 3),
+                EffectiveFrom = new DateOnly(2026, 1, 1),
+            };
+        }
+    }
+
+    private static IEnumerable<BenchmarkMetric> BuildBenchmarks()
+    {
+        long id = 1;
+        // Both percentages, so the benchmark metrics can carry one unit. The figures below are
+        // where the cohort lands in the final month; earlier months drift down from them.
+        var metrics = new (string Key, decimal P25, decimal P50, decimal P75)[]
+        {
+            ("on_time_rate", 93.1m, 95.8m, 97.9m),
+            ("return_rate", 4.4m, 3.3m, 2.1m),
+        };
+
+        for (var month = new DateOnly(2025, 1, 1); month <= SeedPlan.AsOf; month = month.AddMonths(1))
+        {
+            var cohort = month < SeedPlan.CohortGrewOn ? SeedPlan.CohortEarly2025 : SeedPlan.CohortNow;
+            // Drift is measured back from the final month, so the headline month reads exactly
+            // the figures above rather than those figures plus however long the series is.
+            var monthsBack = ((SeedPlan.AsOf.Year - month.Year) * 12) + (SeedPlan.AsOf.Month - month.Month);
+            var drift = monthsBack * -0.04m;
+
+            foreach (var (key, p25, p50, p75) in metrics)
+            {
+                yield return new BenchmarkMetric
                 {
-                    yield return new HeadcountMonthly
+                    Id = id++,
+                    MetricKey = key,
+                    PeriodMonth = new DateOnly(month.Year, month.Month, 1),
+                    DimensionKey = "all",
+                    DimensionValue = "All clients",
+                    ClientCount = cohort,
+                    P25 = p25 + drift,
+                    P50 = p50 + drift,
+                    P75 = p75 + drift,
+                };
+            }
+        }
+    }
+
+    private static List<Product> BuildProducts(int trailheadId, int bluefinId)
+    {
+        string[] trailhead =
+        [
+            "Ridgeline Espresso 1kg", "Ridgeline Espresso 250g", "Summit Filter 1kg", "Summit Filter 250g",
+            "Switchback Decaf 250g", "Basecamp Blend 1kg", "Basecamp Blend 250g", "Treeline Single Origin",
+            "Cold Brew Concentrate", "Trailhead Mug", "Pourover Kit", "Travel Press",
+            "Paper Filters 100ct", "Descaling Tablets", "Gift Box — Explorer", "Gift Box — Summit",
+            "Subscription — Monthly", "Subscription — Fortnightly", "Barista Apron", "Trailhead Tote",
+        ];
+
+        string[] bluefin =
+        [
+            "Harbor Jacket", "Harbor Jacket XL", "Deckhand Tee", "Deckhand Tee 2pk",
+            "Current Shorts", "Tidal Hoodie", "Anchor Cap", "Breakwater Socks",
+        ];
+
+        var products = new List<Product>();
+        long id = 1;
+
+        for (var i = 0; i < trailhead.Length; i++)
+        {
+            // Exactly six sit at or below their reorder point — the "low-stock products" KPI.
+            var low = i is 4 or 8 or 11 or 13 or 16 or 18;
+            products.Add(new Product
+            {
+                Id = id++, ClientId = trailheadId,
+                Sku = $"TRH-{1000 + i}", Name = trailhead[i],
+                OnHand = low ? 18 + i : 240 + i * 37,
+                ReorderPoint = low ? 40 + i : 60,
+            });
+        }
+
+        for (var i = 0; i < bluefin.Length; i++)
+        {
+            products.Add(new Product
+            {
+                Id = id++, ClientId = bluefinId,
+                Sku = $"BLU-{2000 + i}", Name = bluefin[i],
+                OnHand = 120 + i * 24, ReorderPoint = 50,
+            });
+        }
+
+        return products;
+    }
+
+    private static IEnumerable<Fee> BuildFees(int trailheadId, int bluefinId)
+    {
+        long id = 1;
+        var rates = new Dictionary<string, decimal>
+        {
+            ["Storage"] = 1_840m, ["Pick & pack"] = 0m, ["Shipping"] = 0m,
+            ["Returns handling"] = 0m, ["Account management"] = 450m,
+        };
+
+        foreach (var clientId in new[] { trailheadId, bluefinId })
+        {
+            var scale = clientId == trailheadId ? 1m : 0.11m;
+
+            for (var month = new DateOnly(2025, 1, 1); month <= SeedPlan.AsOf; month = month.AddMonths(1))
+            {
+                var volume = clientId == trailheadId ? VolumeFor(month) : VolumeFor(month) * 0.11;
+
+                foreach (var feeType in SeedPlan.FeeTypes)
+                {
+                    var amount = feeType switch
                     {
-                        DepartmentId = department.Id,
-                        RegionId = region.Id,
-                        Month = month,
-                        Headcount = 18 + random.Next(0, 26),
+                        "Pick & pack" => (decimal)volume * 1.35m,
+                        "Shipping" => (decimal)volume * 7.20m,
+                        "Returns handling" => (decimal)volume * SeedPlan.ReturnRate.ToDecimal() * 3.10m,
+                        _ => rates[feeType] * scale,
+                    };
+
+                    yield return new Fee
+                    {
+                        Id = id++, ClientId = clientId,
+                        PeriodMonth = new DateOnly(month.Year, month.Month, 1),
+                        FeeType = feeType,
+                        Amount = Math.Round(amount, 2),
                     };
                 }
             }
         }
     }
 
-    private static IEnumerable<AttritionEvent> BuildAttrition(Random random, Region[] regions, Department[] departments)
+    internal static double VolumeFor(DateOnly month)
     {
-        for (var i = 0; i < 184; i++)
-        {
-            var daysBack = random.Next(0, 24 * 30);
-            yield return new AttritionEvent
-            {
-                DepartmentId = departments[random.Next(departments.Length)].Id,
-                RegionId = regions[random.Next(regions.Length)].Id,
-                EventDate = AsOf.AddDays(-daysBack),
-                Reason = AttritionReasons[random.Next(AttritionReasons.Length)],
-                ReplacementCost = 9_000m + random.Next(0, 42) * 500m,
-            };
-        }
+        var table = month.Year == 2025 ? SeedPlan.Volume2025 : SeedPlan.Volume2026;
+        return month.Month <= table.Length ? table[month.Month - 1] : table[^1];
     }
 
-    private static IEnumerable<Entities.Program> BuildPrograms() =>
-    [
-        new() { Name = "Diversity & Inclusion (D&I)", FiscalYear = 2026, BudgetAmount = 208_620m, SpendAmount = 164_310m },
-        new() { Name = "Diversity & Inclusion (D&I)", FiscalYear = 2025, BudgetAmount = 180_000m, SpendAmount = 176_420m },
-        new() { Name = "Leadership Development", FiscalYear = 2026, BudgetAmount = 142_000m, SpendAmount = 98_750m },
-        new() { Name = "Graduate Intake", FiscalYear = 2026, BudgetAmount = 96_500m, SpendAmount = 91_200m },
-        new() { Name = "Wellbeing", FiscalYear = 2026, BudgetAmount = 64_000m, SpendAmount = 38_900m },
-    ];
-
-    /// <summary>
-    /// A few reports per person so the gallery isn't empty.
-    ///
-    /// <para>
-    /// These are owned rows: the policy on <c>saved_reports</c> is owner-only, so each principal
-    /// sees their own three and nobody else's. The gallery demonstrates that without saying so.
-    /// </para>
-    /// </summary>
-    private static IEnumerable<SavedReport> BuildSavedReports()
-    {
-        (string Owner, string Title, string Question)[] reports =
-        [
-            (DemoPrincipals.Analyst, "Revenue by region", "revenue by region, last quarter"),
-            (DemoPrincipals.Analyst, "Revenue over time", "revenue by month"),
-            (DemoPrincipals.Analyst, "What sells", "revenue by product category"),
-            (DemoPrincipals.RegionalManager, "My region's revenue", "revenue by region, last quarter"),
-            (DemoPrincipals.RegionalManager, "Headcount", "headcount by department"),
-            (DemoPrincipals.RegionalManager, "Why people leave", "attrition by reason"),
-            (DemoPrincipals.HrDirector, "D&I feasibility", "turnover cost vs the D&I program budget"),
-            (DemoPrincipals.HrDirector, "Pay by department", "average salary by department"),
-            (DemoPrincipals.HrDirector, "Why people leave", "attrition by reason"),
-        ];
-
-        var created = new DateTime(2026, 10, 28, 9, 30, 0, DateTimeKind.Utc);
-
-        foreach (var (owner, title, question) in reports)
-        {
-            created = created.AddMinutes(37);
-            yield return new SavedReport
-            {
-                Id = Guid.NewGuid(),
-                OwnerKey = owner,
-                Title = title,
-                Question = question,
-                // The spec is re-planned on open rather than replayed, so this is a record of
-                // what was asked, not a cached answer that could silently go stale.
-                SpecJson = "{}",
-                CreatedAt = created,
-                UpdatedAt = created,
-            };
-        }
-    }
-
-    private static List<Customer> BuildCustomers(Random random, Region[] regions)
-    {
-        string[] prefixes = ["Northwind", "Harbour", "Granite", "Juniper", "Meridian", "Copper", "Lantern", "Falcon"];
-        string[] suffixes = ["Logistics", "Media", "Health", "Foods", "Energy", "Labs", "Partners", "Group"];
-
-        var customers = new List<Customer>();
-        for (var i = 0; i < 64; i++)
-        {
-            customers.Add(new Customer
-            {
-                Name = $"{prefixes[i % prefixes.Length]} {suffixes[random.Next(suffixes.Length)]}",
-                RegionId = regions[random.Next(regions.Length)].Id,
-            });
-        }
-        return customers;
-    }
-
-    private static List<Order> BuildOrders(Random random, List<Customer> customers)
-    {
-        var orders = new List<Order>();
-        for (var i = 0; i < 920; i++)
-        {
-            var customer = customers[random.Next(customers.Count)];
-            var daysBack = random.Next(0, 24 * 30);
-
-            orders.Add(new Order
-            {
-                CustomerId = customer.Id,
-                // Orders belong to the customer's region, so the two never disagree — a
-                // mismatch would make the RLS predicate on order_items quietly wrong.
-                RegionId = customer.RegionId,
-                OrderedAt = AsOf.AddDays(-daysBack).ToDateTime(new TimeOnly(9, 0), DateTimeKind.Utc),
-                Status = OrderStatuses[random.Next(OrderStatuses.Length)],
-            });
-        }
-        return orders;
-    }
-
-    private static IEnumerable<OrderItem> BuildOrderItems(Random random, List<Order> orders, Product[] products)
-    {
-        foreach (var order in orders)
-        {
-            var lines = 1 + random.Next(3);
-            for (var i = 0; i < lines; i++)
-            {
-                var product = products[random.Next(products.Length)];
-                yield return new OrderItem
-                {
-                    OrderId = order.Id,
-                    ProductId = product.Id,
-                    RegionId = order.RegionId,
-                    Quantity = 1 + random.Next(6),
-                    UnitPrice = product.UnitPrice,
-                };
-            }
-        }
-    }
+    private static decimal ToDecimal(this double value) => (decimal)value;
 }

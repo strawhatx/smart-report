@@ -9,6 +9,18 @@ namespace SmartReport.App.Endpoints;
 
 public sealed record AskRequest(string Question);
 
+public sealed record SaveRequest(string Title, string Question);
+
+/// <summary>Server-side validation of what the browser sends (C4).</summary>
+public sealed class SaveRequestValidator : AbstractValidator<SaveRequest>
+{
+    public SaveRequestValidator()
+    {
+        RuleFor(r => r.Title).NotEmpty().MaximumLength(160);
+        RuleFor(r => r.Question).NotEmpty().MaximumLength(500);
+    }
+}
+
 /// <summary>Server-side validation of the one field the browser sends (C4).</summary>
 public sealed class AskRequestValidator : AbstractValidator<AskRequest>
 {
@@ -75,6 +87,31 @@ public static class ReportStreamEndpoint
                 return Results.Empty;
             })
             .RequireRateLimiting("ask");
+
+        // Saving is the only write the portal makes. Owner and client come from the resolved
+        // principal, never from the body (A4), and the policy's WITH CHECK rejects the insert if
+        // they disagree.
+        app.MapPost("/api/reports/save", async (
+            [FromBody] SaveRequest request,
+            PrincipalContext principals,
+            SmartReport.Data.SavedReportStore store,
+            CancellationToken cancellationToken) =>
+        {
+            var principal = await principals.GetAsync(cancellationToken);
+            if (principal is null)
+            {
+                return Results.Json(new { error = "Sign in first." }, statusCode: 401);
+            }
+
+            var validation = new SaveRequestValidator().Validate(request);
+            if (!validation.IsValid)
+            {
+                return Results.Json(new { error = validation.Errors[0].ErrorMessage }, statusCode: 400);
+            }
+
+            var id = await store.SaveAsync(principal, request.Title, request.Question, cancellationToken);
+            return Results.Json(new { id });
+        }).RequireRateLimiting("ask");
     }
 
     private static async Task WriteEventAsync(
@@ -84,11 +121,17 @@ public static class ReportStreamEndpoint
         {
             ReportEvent.Thinking e => new { text = e.Text },
             ReportEvent.Planned e => new { title = e.Spec.Title, queries = e.Spec.Queries },
-            ReportEvent.Guard e => new { outcome = e.Decision.Outcome, subject = e.Decision.Subject, reason = e.Decision.Reason },
+            ReportEvent.Guard e => new
+            {
+                outcome = e.Decision.Outcome,
+                subject = e.Decision.Subject,
+                reason = e.Decision.Reason,
+                remedy = e.Decision.Remedy,
+            },
             ReportEvent.Sql e => new { model = e.Model, sql = e.Text },
             ReportEvent.Rows e => new { model = e.Model, count = e.Count },
             ReportEvent.Document e => new { report = e.Report },
-            ReportEvent.Refused e => new { message = e.Message },
+            ReportEvent.Refused e => new { message = e.Message, remedy = e.Remedy },
             ReportEvent.Failed e => new { message = e.Message },
             _ => new { },
         };

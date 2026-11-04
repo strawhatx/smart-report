@@ -6,7 +6,8 @@ namespace SmartReport.Core.Sql;
 public sealed record QueryParameter(string Name, object Value);
 
 /// <summary>One column of the result set, described for rendering.</summary>
-public sealed record ResultColumn(string Key, string Label, bool IsMetric, string Unit, bool IsTemporal);
+public sealed record ResultColumn(
+    string Key, string Label, bool IsMetric, string Unit, bool IsTemporal, bool IsPartToWhole = false);
 
 /// <summary>
 /// Ready-to-execute SQL plus its parameters.
@@ -19,6 +20,7 @@ public sealed record ResultColumn(string Key, string Label, bool IsMetric, strin
 /// </summary>
 public sealed record CompiledQuery(
     string Model,
+    string? Label,
     string Sql,
     IReadOnlyList<QueryParameter> Parameters,
     IReadOnlyList<ResultColumn> Columns,

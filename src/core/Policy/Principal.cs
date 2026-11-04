@@ -1,38 +1,41 @@
 namespace SmartReport.Core.Policy;
 
-/// <summary>Role keys. These match the values written into <c>app.role</c> for Postgres RLS.</summary>
+/// <summary>Roles a client's own people hold. Must match the values written into <c>app.role</c>.</summary>
 public static class Roles
 {
-    public const string Analyst = "analyst";
-    public const string RegionalManager = "regional_manager";
-    public const string HrDirector = "hr_director";
-
-    public static readonly IReadOnlyList<string> All = [Analyst, RegionalManager, HrDirector];
+    public const string Coordinator = "coordinator";
+    public const string AccountOwner = "account_owner";
 
     public static string Label(string role) => role switch
     {
-        Analyst => "Analyst",
-        RegionalManager => "Regional Manager",
-        HrDirector => "HR Director",
+        Coordinator => "Warehouse Coordinator",
+        AccountOwner => "Account Owner",
+        "northpoint_staff" => "Northpoint staff",
         _ => role,
     };
 }
 
 /// <summary>
-/// Who is asking.
+/// Who is asking, and on whose behalf.
 ///
 /// <para>
-/// Built by the app from the database on every request, never from a request field and never from
-/// a claim baked into the cookie at sign-in (A2, A4, A5). The cookie says who you are; this says
-/// what you may do, and it is re-read each time so a permission change takes effect immediately.
+/// Built from the database on every request. <b>The client account comes from the signed-in
+/// session, never from the model's prompt</b> — nothing a question says can change which client's
+/// data is in scope. Role is read from the user's row rather than a cookie claim, so a permission
+/// change takes effect on the next request (A2, A4, A5).
 /// </para>
 /// </summary>
+/// <param name="AccountOwnerName">
+/// Who to ask for access. A refusal that names a person is actionable; one that says "denied" is not.
+/// </param>
 public sealed record Principal(
     string Key,
     string DisplayName,
+    string JobTitle,
     string Role,
-    int? RegionId,
-    string? RegionName)
+    int ClientId,
+    string ClientName,
+    string? AccountOwnerName)
 {
-    public bool IsRegionScoped => Role == Roles.RegionalManager;
+    public bool IsAccountOwner => Role == Roles.AccountOwner;
 }

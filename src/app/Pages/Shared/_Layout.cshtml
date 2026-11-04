@@ -1,88 +1,61 @@
-@inject IHostEnvironment Environment
 @{
-    var nonce = Context.CspNonce();
-    var principal = ViewData["Principal"] as Principal;
-    var isDev = Environment.IsDevelopment();
+    var title = ViewData["Title"] as string;
 }
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="en" dir="ltr" class="h-full">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>@ViewData["Title"] · Smart Report</title>
-    <meta name="description" content="@(ViewData["Description"] ?? "Stop maintaining reports. Let people ask questions instead — answered by a model that runs on your hardware, bounded by the permissions you already wrote.")" />
-
-    <meta property="og:title" content="@ViewData["Title"] · Smart Report" />
-    <meta property="og:description" content="@(ViewData["Description"] ?? "AI reports, governed by the permissions you already have.")" />
+    <title>@(title is null ? "Northpoint Fulfillment" : title + " · Northpoint Fulfillment")</title>
+    <meta name="description" content="@(ViewData["Description"] ?? "Northpoint Fulfillment stores, packs and ships orders for online brands. Clients ask Smart Reports about their own orders and get the report.")" />
+    <meta property="og:title" content="@(title ?? "Northpoint Fulfillment")" />
     <meta property="og:type" content="website" />
-
     <link rel="icon" href="~/favicon.ico" />
-    <link rel="stylesheet" href="~/css/tokens.css" />
-    <link rel="stylesheet" href="~/css/base.css" />
+    <link rel="stylesheet" href="~/css/app.css" asp-append-version="true" />
     @await RenderSectionAsync("Head", required: false)
 </head>
-<body data-page="@ViewData["PageKey"]">
-<a class="skip-link" href="#main">Skip to content</a>
+<body class="min-h-full flex flex-col">
+<a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded focus:bg-ink focus:px-4 focus:py-2 focus:text-paper">Skip to content</a>
 
-@if (isDev)
-{
-    @* Rule A12: this switcher has no password. It must be impossible to mistake for part of the
-       product, so it is announced rather than tucked away. *@
-    <div class="dev-banner" role="region" aria-label="Development sign-in">
-        <div class="shell dev-banner__inner">
-            <strong>DEV</strong>
-            <span>Unauthenticated identity switcher — development only.</span>
-            <span class="dev-banner__spacer"></span>
-            @foreach (var demo in DemoPrincipalList.All)
-            {
-                <form method="post" action="/dev/signin-as/@demo.Key">
-                    <input type="hidden" name="returnUrl" value="@Context.Request.Path" />
-                    <button type="submit" class="dev-switch"
-                            aria-pressed="@((principal?.Key == demo.Key).ToString().ToLowerInvariant())">
-                        @demo.Label
-                    </button>
-                </form>
-            }
-            @if (principal is not null)
-            {
-                <form method="post" action="/signout">
-                    <button type="submit" class="dev-switch">Sign out</button>
-                </form>
-            }
-        </div>
-    </div>
-}
+@* The demo banner. Northpoint is invented, and the page should never let anyone think otherwise. *@
+<div class="bg-ink text-paper text-center text-[13px] leading-5 px-4 py-2">
+    Demo business. Northpoint Fulfillment is a placeholder for <strong class="font-semibold">your company's website or app</strong>.
+</div>
 
-<header class="masthead">
-    <div class="shell masthead__inner">
-        <a class="wordmark" href="/">
-            <span class="wordmark__bracket">[</span>SR<span class="wordmark__bracket">]</span>
-            <span>SMARTREPORT</span>
-        </a>
-        <div class="masthead__spacer"></div>
-        <nav class="masthead__nav" aria-label="Main">
-            <a href="/" aria-current="@(ViewData["PageKey"] as string == "home" ? "page" : null)">Overview</a>
-            <a href="/reports" aria-current="@(ViewData["PageKey"] as string == "reports" ? "page" : null)">Reports</a>
-        </nav>
-        @if (principal is not null)
-        {
-            <span class="label" title="Role is read from the database on every request">
-                @principal.DisplayName · @Roles.Label(principal.Role)
+<header class="bg-surface border-b border-rule">
+    <div class="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
+        <a href="/" class="flex items-center gap-2.5 shrink-0">
+            <span class="grid size-9 place-items-center rounded-[10px] bg-brand text-white" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-5">
+                    <path d="M12 2.6 20.5 7v10L12 21.4 3.5 17V7z" stroke-linejoin="round"/>
+                    <path d="M3.5 7 12 11.5 20.5 7M12 11.5V21" stroke-linejoin="round"/>
+                </svg>
             </span>
-        }
+            <span class="text-[19px] font-bold tracking-[-0.02em]">Northpoint Fulfillment</span>
+        </a>
+
+        <nav class="ml-auto hidden items-center gap-7 text-[15px] md:flex" aria-label="Main">
+            @* Inert: Northpoint is a placeholder business, and these shouldn't pretend to lead anywhere. *@
+            <span class="text-ink-soft cursor-default">Services</span>
+            <span class="text-ink-soft cursor-default">Pricing</span>
+            <span class="text-ink-soft cursor-default">Integrations</span>
+            <a href="/portal/reports" class="font-semibold hover:text-brand">Client portal</a>
+        </nav>
+
+        <a href="/portal/reports"
+           class="ml-auto rounded-lg bg-ink px-4 py-2.5 text-[15px] font-semibold text-paper hover:bg-ink-soft md:ml-0">
+            Get a quote
+        </a>
     </div>
 </header>
 
-<main id="main">
+<main id="main" class="flex-1">
     @RenderBody()
 </main>
 
-<footer class="site-footer">
-    <div class="shell site-footer__inner">
-        <span class="label">[SR] SMARTREPORT</span>
-        <span>A demo. The model plans; the database decides.</span>
-        <span class="masthead__spacer"></span>
-        <span class="label">Postgres RLS · local model</span>
+<footer class="border-t border-rule bg-surface">
+    <div class="mx-auto max-w-7xl px-4 py-8 text-[14px] text-ink-faint sm:px-6 lg:px-8">
+        Northpoint Fulfillment and its clients are fictional businesses used for this demo.
     </div>
 </footer>
 

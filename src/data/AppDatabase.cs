@@ -45,14 +45,14 @@ public sealed class AppDatabase(string connectionString)
         NpgsqlTransaction transaction,
         string principalKey,
         string? role,
-        int? regionId,
+        int? clientId,
         CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(
             """
             SELECT set_config('app.principal', @principal, true),
                    set_config('app.role',      @role,      true),
-                   set_config('app.region_id', @region,    true)
+                   set_config('app.client_id', @client,    true)
             """,
             connection, transaction);
 
@@ -60,7 +60,7 @@ public sealed class AppDatabase(string connectionString)
         // Empty string rather than NULL: set_config rejects NULL, and the policies treat an empty
         // value as "unset" via NULLIF, which denies.
         command.Parameters.AddWithValue("role", (object?)role ?? string.Empty);
-        command.Parameters.AddWithValue("region", regionId?.ToString() ?? string.Empty);
+        command.Parameters.AddWithValue("client", clientId?.ToString() ?? string.Empty);
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -71,7 +71,7 @@ public sealed class AppDatabase(string connectionString)
         Principal principal,
         CancellationToken cancellationToken) =>
         ApplyPrincipalAsync(connection, transaction, principal.Key, principal.Role,
-            principal.RegionId, cancellationToken);
+            principal.ClientId, cancellationToken);
 
     public static ValueTask<NpgsqlTransaction> BeginAsync(
         NpgsqlConnection connection, CancellationToken cancellationToken) =>

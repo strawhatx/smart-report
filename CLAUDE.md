@@ -142,8 +142,11 @@ something a few lines of code can do.
 **Why:** AI tools sometimes invent package names, and attackers publish malware under those names.
 **Dev note:** Versions live in one place, `Directory.Packages.props`, so the whole dependency set
 is readable at a glance. It is deliberately short: `Npgsql.EntityFrameworkCore.PostgreSQL`,
-`Microsoft.EntityFrameworkCore.Design`, `FluentValidation`, `Microsoft.Extensions.Options` and
-`Microsoft.Extensions.Logging.Abstractions`, plus test-only `xunit`,
+`Microsoft.EntityFrameworkCore.Design`, `FluentValidation`, `Microsoft.Extensions.Options`,
+`Microsoft.Extensions.Logging.Abstractions`, and for the planner `Microsoft.Extensions.AI`,
+`Microsoft.Extensions.AI.OpenAI` and `Anthropic` — three packages that buy provider independence
+and native structured output, which is what makes an invented metric key impossible rather than
+merely rejected. Plus test-only `xunit`,
 `Microsoft.AspNetCore.Mvc.Testing`, `Testcontainers.PostgreSql`, `Npgsql`. Charts are hand-rolled
 SVG rather than a charting library, for this reason among others. `src/core/` has **zero** package
 references and must stay that way — `ArchitectureTests` enforces it.
@@ -305,6 +308,27 @@ from `DataCatalog`.
 schema by hand against a running database. Destructive SQL needs explicit confirmation.
 **Why:** Migrations are a record of every change, so you can review security and undo mistakes.
 
+### D10. Aggregates across clients carry a minimum cohort
+**Rule:** Any figure computed across more than one client must come from a pre-aggregated table
+with no `client_id` column, and every query against it carries a minimum-cohort predicate —
+declared as a `MandatoryPredicate` on the catalog model **and** repeated in the table's policy.
+Never compute a peer figure by aggregating live client rows.
+**Why:** "The median of three clients" is a thin disguise over three named companies. Row-level
+security answers *whose rows*; it does not answer *what can be inferred from a total*.
+**Translated:** No pack equivalent — the pack covers row access, not disclosure. Added because
+this product answers comparison questions, which is exactly where that distinction bites.
+**Dev note:** The floor is `DataCatalog.MinimumCohortSize`, mirrored in `RowLevelSecurity`.
+`BenchmarkDisclosureTests` asserts the predicate is present in every compiled benchmark query,
+that sub-floor rows are unreadable, and that such rows exist — otherwise the test passes against
+an empty table and proves nothing.
+
+### D11. Northpoint's own data is not client data
+**Rule:** Tables holding the operator's commercial information (`carrier_contract_rates`) have no
+`client_id` and require a role no client user holds. A client asking for one gets a refusal with
+an authorized alternative, never a filtered-to-empty result.
+**Why:** The portal reads the same database the business runs on. What is safe for a customer to
+see is a smaller set than what is there.
+
 ### D9. Check before you ship
 **Rule:** `RlsCoverageTests` runs the "tables without RLS" query and fails if anything is
 unprotected. After any schema change, run the test suite and sign in as a second principal to
@@ -327,6 +351,8 @@ sentences what changed, what you checked, and anything they need to decide.
 - [ ] All input validated server-side; DTOs, not entities, bound from requests.
 - [ ] Every new table has RLS **enabled and forced** with per-action policies in the same
       migration, and every policy denies on unset `app.*`.
+- [ ] Any cross-client aggregate has a minimum-cohort floor in the compiler *and* the policy.
+- [ ] A refusal gives a reason, and a remedy the asker is actually allowed to use.
 - [ ] Every new view is `security_invoker = true`.
 - [ ] No string-built SQL. No new path from model output to SQL text.
 - [ ] `no-store` on authenticated routes; nothing user-specific is cached.

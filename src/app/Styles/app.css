@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+/* Razor and the chart modules are outside Tailwind's automatic detection, so name them. */
+@source "../Pages/**/*.cshtml";
+@source "../wwwroot/js/**/*.js";
+
+/*
+  Northpoint Fulfillment.
+
+  A plain, confident operations brand: warm off-white paper, near-black type, one working blue,
+  and a small set of accents used only by charts. Nothing here is decorative — if a colour isn't
+  carrying meaning it isn't in the theme.
+*/
+@theme {
+  /* --- Surface and type */
+  --color-paper: #f5f3ef;
+  --color-surface: #ffffff;
+  --color-sunk: #ebe8e1;
+  --color-ink: #141414;
+  --color-ink-soft: #4a4a48;
+  --color-ink-faint: #7b7a76;
+  --color-rule: #e2ded6;
+  --color-rule-strong: #cdc8bd;
+
+  /* --- Brand */
+  --color-brand: #1d5ba6;
+  --color-brand-dark: #174a88;
+  --color-brand-wash: #e8f0f9;
+
+  /* --- Status. Reserved: these never stand in for a chart series. */
+  --color-good: #2f7d53;
+  --color-warn: #b45309;
+  --color-danger: #a62f24;
+  --color-danger-wash: #fbeeec;
+
+  /*
+    --- Categorical chart palette, in fixed slot order: blue, green, purple, orange.
+
+    Assigned by slot, never cycled, never reordered by rank. Four slots is not an accident —
+    it is the largest set that passed every check of the palette validator against this surface
+    (lightness band, chroma floor, CVD separation, normal-vision floor, contrast). Green beside
+    any warm hue collapses under red-green deficiency, so green sits between two cool neighbours.
+
+    Do not add a fifth by eye. Re-run the validator — see docs/palette.md.
+  */
+  --color-series-1: #1d5ba6;
+  --color-series-2: #15803d;
+  --color-series-3: #6d28d9;
+  --color-series-4: #c2410c;
+
+  /* --- Type */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Roboto Mono", monospace;
+
+  --radius-card: 0.75rem;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Headings carry the brand's weight; the reference is tight and heavy. */
+  h1, h2, h3 {
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+}
+
+@utility label-mono {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}

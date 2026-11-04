@@ -6,9 +6,9 @@ namespace SmartReport.Tests;
 
 /// <summary>
 /// Connections are pooled and reused. If the principal were applied with a session-level
-/// <c>SET</c> instead of a transaction-local one, the next request to pick up that connection
-/// would inherit the previous caller's identity — a cross-user data leak that no amount of
-/// application code above it could catch.
+/// <c>SET</c> rather than a transaction-local one, the next request to pick up that connection
+/// would inherit the previous caller's client — a cross-tenant leak no application code above it
+/// could catch (D6).
 /// </summary>
 [Collection(PostgresCollection.Name)]
 public sealed class PrincipalLeakTests(PostgresFixture fixture)
@@ -16,8 +16,7 @@ public sealed class PrincipalLeakTests(PostgresFixture fixture)
     [Fact]
     public async Task A_connection_returned_to_the_pool_carries_no_principal()
     {
-        // Use and release a connection as a regional manager.
-        var (first, transaction) = await fixture.OpenAsAsync("marcus", Roles.RegionalManager, 1);
+        var (first, transaction) = await fixture.OpenAsAsync("dana", Roles.Coordinator, TestPrincipals.TrailheadId);
         await using (first)
         await using (transaction)
         {
@@ -31,7 +30,7 @@ public sealed class PrincipalLeakTests(PostgresFixture fixture)
         await using var settings = new NpgsqlCommand(
             """
             SELECT coalesce(current_setting('app.role', true), ''),
-                   coalesce(current_setting('app.region_id', true), ''),
+                   coalesce(current_setting('app.client_id', true), ''),
                    coalesce(current_setting('app.principal', true), '')
             """, second);
 
@@ -46,11 +45,11 @@ public sealed class PrincipalLeakTests(PostgresFixture fixture)
     [Fact]
     public async Task A_recycled_connection_sees_no_rows_until_a_principal_is_applied()
     {
-        var (used, transaction) = await fixture.OpenAsAsync("priya", Roles.HrDirector, null);
+        var (used, transaction) = await fixture.OpenAsAsync("priya", Roles.AccountOwner, TestPrincipals.TrailheadId);
         await using (used) await using (transaction) { await transaction.RollbackAsync(); }
 
         await using var fresh = await fixture.AppDatabase.OpenAsync(CancellationToken.None);
-        await using var command = new NpgsqlCommand("SELECT count(*) FROM compensation", fresh);
+        await using var command = new NpgsqlCommand("SELECT count(*) FROM orders", fresh);
 
         Assert.Equal(0L, (long)(await command.ExecuteScalarAsync())!);
     }

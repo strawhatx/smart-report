@@ -1,281 +1,61 @@
 @page
 @model IndexModel
 @{
-    ViewData["Title"] = "Stop maintaining reports";
-    ViewData["PageKey"] = "home";
-    ViewData["Description"] = "Someone needs a report, a developer owns it forever. Let people ask instead — answered by a model on your own hardware, bounded by the permissions you already wrote.";
+    ViewData["Title"] = "Order fulfillment for online brands";
 }
 
-@section Head {
-    <link rel="stylesheet" href="~/css/home.css" />
-}
+<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 
-@* [00] Boot. Decorative: it is aria-hidden and removed entirely under reduced motion.
-   The hero below renders immediately underneath, so the headline is readable whether or not
-   this ever runs. *@
-<div class="boot" id="boot" aria-hidden="true" hidden>
-    <div class="boot__inner">
-        <div class="boot__lines" id="boot-lines"></div>
-        <div class="boot__meter"><span class="boot__meter-fill" id="boot-fill"></span></div>
-        <div class="boot__pct"><span id="boot-pct">000</span>%</div>
-    </div>
-    <button type="button" class="boot__skip" id="boot-skip">Skip <kbd>esc</kbd></button>
-</div>
+    <section class="grid items-center gap-12 py-14 lg:grid-cols-2 lg:gap-16 lg:py-24">
+        <div>
+            <p class="label-mono">Order fulfillment since 2011</p>
+            <h1 class="mt-5 text-[clamp(2.25rem,6vw,3.75rem)] font-bold leading-[1.04]">
+                We store, pack and ship orders for online brands.
+            </h1>
+            <p class="mt-6 max-w-xl text-[17px] leading-7 text-ink-soft">
+                340 brands trust Northpoint with their inventory. Orders from Shopify, Amazon and
+                wholesale ship same day from three warehouses.
+            </p>
+            <div class="mt-8 flex flex-wrap gap-3">
+                <a href="/portal/reports" class="rounded-lg bg-brand px-5 py-3 text-[15px] font-semibold text-white hover:bg-brand-dark">
+                    Get a quote
+                </a>
+                <span class="rounded-lg border border-rule-strong bg-surface px-5 py-3 text-[15px] font-semibold cursor-default">
+                    How it works
+                </span>
+            </div>
+        </div>
 
-@* The signature scene. Fixed behind sections 01–05, lazily loaded, replaced by a static
-   drawing on small screens, low-power devices, or when motion is reduced. *@
-<div class="scene" aria-hidden="true">
-    <canvas id="schema-canvas" class="scene__canvas"></canvas>
-    <div class="scene__fallback" id="scene-fallback"></div>
-</div>
+        @* Decorative: warehouse bays, not data. Hidden from assistive tech. *@
+        <div class="rounded-[22px] bg-sunk p-5 sm:p-7" aria-hidden="true">
+            <div class="grid grid-cols-3 gap-4">
+                <div class="aspect-4/3 rounded-xl bg-surface"></div>
+                <div class="aspect-4/3 rounded-xl bg-brand"></div>
+                <div class="aspect-4/3 rounded-xl bg-surface"></div>
+                <div class="aspect-4/3 rounded-xl bg-series-4"></div>
+                <div class="aspect-4/3 rounded-xl bg-surface"></div>
+                <div class="aspect-4/3 rounded-xl bg-[#c4b294]"></div>
+            </div>
+        </div>
+    </section>
 
-<!-- ───────────────────────────── [01] HERO ───────────────────────────── -->
-<section class="hero" id="s01" data-section="01">
-    <div class="shell hero__inner">
-        <p class="label"><span class="label__index">[01]</span> The premise</p>
-
-        <h1 class="hero__headline" data-split>
-            Stop maintaining reports.<br />
-            Start answering questions.
-        </h1>
-
-        <p class="hero__sub">
-            Every report starts as a favour and ends as a dependency. The data is already in your
-            database — so let people ask it directly, and let the rules you already wrote decide
-            what comes back.
-        </p>
-
-        <div class="hero__actions">
-            <a class="btn" href="/reports" data-magnetic>
-                Open the workspace <span class="btn__arrow">→</span>
+    <section class="mb-16 rounded-[22px] bg-ink px-6 py-10 text-paper sm:px-10 lg:mb-24">
+        <div class="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+            <div class="max-w-2xl">
+                <p class="label-mono !text-paper/55">For our clients</p>
+                <h2 class="mt-3 text-[clamp(1.5rem,3.2vw,2rem)] font-bold leading-tight">
+                    Smart Reports: ask about your orders, get the report.
+                </h2>
+                <p class="mt-4 text-[15px] leading-7 text-paper/70">
+                    Shipping, inventory, returns and fees, built from your own data in seconds. No more
+                    emailing us for a spreadsheet. You only ever see your own account.
+                </p>
+            </div>
+            <a href="/portal/reports"
+               class="shrink-0 self-start rounded-lg bg-surface px-6 py-3.5 text-[15px] font-semibold text-ink hover:bg-paper lg:self-auto">
+                Open client reports
             </a>
-            <a class="btn btn--ghost" href="#s04" data-magnetic>See how it's governed</a>
         </div>
+    </section>
 
-        <ul class="pillars">
-            <li class="pillar">
-                <span class="label"><span class="label__index">01</span></span>
-                <h2>No more report tickets</h2>
-                <p>A question, not a work item. Nobody inherits a PDF generator.</p>
-            </li>
-            <li class="pillar">
-                <span class="label"><span class="label__index">02</span></span>
-                <h2>Rules you already wrote</h2>
-                <p>Roles and row policies that already exist decide what the answer contains.</p>
-            </li>
-            <li class="pillar">
-                <span class="label"><span class="label__index">03</span></span>
-                <h2>Your data never leaves</h2>
-                <p>The model runs on your hardware. Nothing is sent anywhere to be read.</p>
-            </li>
-        </ul>
-    </div>
-</section>
-
-<!-- ───────────────────────────── [02] PROBLEM ───────────────────────────── -->
-<section class="band" id="s02" data-section="02">
-    <div class="shell">
-        <p class="label"><span class="label__index">[02]</span> The problem</p>
-        <h2 class="band__headline" data-split>
-            Someone needs a report.<br />Now a developer owns it forever.
-        </h2>
-
-        <ul class="cards">
-            <li class="card" data-reveal>
-                <span class="card__index">01</span>
-                <h3>Fragile</h3>
-                <p>A column gets renamed. The export breaks silently and nobody notices for a quarter.</p>
-            </li>
-            <li class="card" data-reveal>
-                <span class="card__index">02</span>
-                <h3>Stale</h3>
-                <p>It answers the question someone had in March, not the one they have now.</p>
-            </li>
-            <li class="card" data-reveal>
-                <span class="card__index">03</span>
-                <h3>Backlogged</h3>
-                <p>Every variation is a ticket. The queue is measured in weeks, the question in minutes.</p>
-            </li>
-            <li class="card" data-reveal>
-                <span class="card__index">04</span>
-                <h3>Bespoke</h3>
-                <p>Forty reports, forty shapes, forty ways to be subtly wrong about the same number.</p>
-            </li>
-        </ul>
-    </div>
-</section>
-
-<!-- ───────────────────────────── [03] THE ASK ───────────────────────────── -->
-<section class="band band--tall" id="s03" data-section="03">
-    <div class="shell band__narrow">
-        <p class="label"><span class="label__index">[03]</span> The ask</p>
-        <h2 class="band__headline" data-split>Ask it the way you'd ask a colleague.</h2>
-        <p class="band__lede">
-            No query language, no report builder, no ticket. The model's job is only to decide
-            <em>which</em> known measure you meant — never to write the query.
-        </p>
-
-        <div class="ask-field" data-reveal>
-            <span class="ask-field__caret">&gt;</span>
-            <span class="ask-field__text" id="ask-typed">revenue by region, last quarter</span>
-            <span class="ask-field__cursor" aria-hidden="true"></span>
-        </div>
-    </div>
-</section>
-
-<!-- ───────────────────────────── [04] THE GUARD ───────────────────────────── -->
-<section class="band band--guard" id="s04" data-section="04">
-    <div class="shell">
-        <p class="label label--signal"><span class="label__index">[04]</span> The guard</p>
-        <h2 class="band__headline" data-split>
-            It can only answer what you<br />already let them see.
-        </h2>
-        <p class="band__lede">
-            The same question, asked by three people. Nothing about the question changes — only
-            who is asking. Pick one.
-        </p>
-
-        <div class="guard" data-reveal>
-            <div class="guard__roles" role="radiogroup" aria-label="Ask as">
-                <button type="button" class="role" role="radio" aria-checked="true" data-role="analyst">
-                    <span class="role__name">Dana</span>
-                    <span class="role__title">Analyst</span>
-                </button>
-                <button type="button" class="role" role="radio" aria-checked="false" data-role="regional_manager">
-                    <span class="role__name">Marcus</span>
-                    <span class="role__title">Regional Manager, North</span>
-                </button>
-                <button type="button" class="role" role="radio" aria-checked="false" data-role="hr_director">
-                    <span class="role__name">Priya</span>
-                    <span class="role__title">HR Director</span>
-                </button>
-            </div>
-
-            <div class="guard__panels">
-                @* Two questions side by side: one everyone may ask, one most may not. *@
-                <article class="guard__panel">
-                    <header class="guard__panel-head">
-                        <span class="label">Question A</span>
-                        <code>revenue by region, last quarter</code>
-                    </header>
-                    <table class="guard__table">
-                        <thead><tr><th scope="col">Region</th><th scope="col">Revenue</th></tr></thead>
-                        <tbody id="guard-rows-a"></tbody>
-                    </table>
-                    <p class="guard__note" id="guard-note-a"></p>
-                </article>
-
-                <article class="guard__panel">
-                    <header class="guard__panel-head">
-                        <span class="label">Question B</span>
-                        <code>average salary by department</code>
-                    </header>
-                    <table class="guard__table">
-                        <thead><tr><th scope="col">Department</th><th scope="col">Average</th></tr></thead>
-                        <tbody id="guard-rows-b"></tbody>
-                    </table>
-                    <p class="guard__note" id="guard-note-b"></p>
-                </article>
-            </div>
-        </div>
-
-        <p class="band__footnote">
-            Two separate mechanisms. The policy engine refuses the measure and says why; Postgres
-            row-level security bounds the rows underneath, so even a bug above it returns nothing
-            extra.
-        </p>
-    </div>
-</section>
-
-<!-- ───────────────────────────── [05] THE RESULT ───────────────────────────── -->
-<section class="band" id="s05" data-section="05">
-    <div class="shell band__narrow">
-        <p class="label"><span class="label__index">[05]</span> The result</p>
-        <h2 class="band__headline" data-split>A report that shows its working.</h2>
-        <p class="band__lede">
-            Every answer carries the query that produced it, the tables it read, and anything held
-            back. A number you can't trace is a number you can't use.
-        </p>
-
-        <figure class="provenance" data-reveal>
-            <figcaption class="label">Provenance · read</figcaption>
-            <p><code>orders</code> <code>order_items</code> <code>regions</code> <code>products</code></p>
-            <figcaption class="label">Withheld</figcaption>
-            <p><code class="is-withheld">compensation.annual_salary</code> — restricted to HR Director</p>
-        </figure>
-    </div>
-</section>
-
-<!-- ───────────────────────────── [06] LOCAL ───────────────────────────── -->
-<section class="band band--quiet" id="s06" data-section="06">
-    <div class="shell band__narrow">
-        <p class="label"><span class="label__index">[06]</span> Where it runs</p>
-        <h2 class="band__headline" data-split>The model runs on your hardware.</h2>
-        <p class="band__lede">
-            Questions and schema stay on the machine. The planner speaks to a local server —
-            Ollama, LM Studio, llama.cpp — and the compiled query never leaves the network it
-            was always on.
-        </p>
-
-        <ol class="flow" data-reveal>
-            <li class="flow__node">Question</li>
-            <li class="flow__arrow" aria-hidden="true">→</li>
-            <li class="flow__node flow__node--signal">Local model</li>
-            <li class="flow__arrow" aria-hidden="true">→</li>
-            <li class="flow__node">Your database</li>
-            <li class="flow__cut" aria-hidden="true"></li>
-            <li class="flow__node flow__node--off">The internet</li>
-        </ol>
-    </div>
-</section>
-
-<!-- ───────────────────────────── [07] HOW ───────────────────────────── -->
-<section class="band" id="s07" data-section="07">
-    <div class="shell">
-        <p class="label"><span class="label__index">[07]</span> How it works</p>
-        <h2 class="band__headline" data-split>Four steps, one of them non-negotiable.</h2>
-
-        <ol class="steps">
-            <li class="step" data-reveal>
-                <span class="step__index">01</span>
-                <h3>Ask</h3>
-                <p>A question in plain language, from whoever needs the answer.</p>
-            </li>
-            <li class="step" data-reveal>
-                <span class="step__index">02</span>
-                <h3>Plan</h3>
-                <p>The model picks measures and groupings from a catalog. It sees keys, not a schema.</p>
-            </li>
-            <li class="step" data-reveal>
-                <span class="step__index">03</span>
-                <h3>Guard</h3>
-                <p>The plan is validated against that catalog, then authorized for the person asking.</p>
-            </li>
-            <li class="step" data-reveal>
-                <span class="step__index">04</span>
-                <h3>Compile</h3>
-                <p>The server builds parameterized SQL from its own metadata. The model never writes SQL.</p>
-            </li>
-        </ol>
-    </div>
-</section>
-
-<!-- ───────────────────────────── [08] CTA ───────────────────────────── -->
-<section class="band band--cta" id="s08" data-section="08">
-    <div class="shell band__narrow">
-        <h2 class="cta__headline" data-split>Ask it something.</h2>
-        <p class="band__lede">
-            Three identities are seeded. Ask all three the same thing and watch the answers differ.
-        </p>
-        <a class="btn" href="/reports" data-magnetic>Open the workspace <span class="btn__arrow">→</span></a>
-    </div>
-</section>
-
-@section Scripts {
-    <script src="~/lib/gsap/gsap.min.js" defer></script>
-    <script src="~/lib/gsap/ScrollTrigger.min.js" defer></script>
-    <script src="~/lib/gsap/SplitText.min.js" defer></script>
-    <script src="~/lib/gsap/CustomEase.min.js" defer></script>
-    <script src="~/lib/lenis/lenis.min.js" defer></script>
-    <script type="module" src="~/js/home/index.js"></script>
-}
+</div>

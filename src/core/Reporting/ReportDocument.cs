@@ -8,7 +8,8 @@ public sealed record KpiTile(string Key, string Label, decimal? Value, string Un
 public sealed record SeriesPoint(string Label, decimal? Value);
 
 public sealed record ChartSeries(
-    string Key, string Label, string Unit, bool IsTemporal, IReadOnlyList<SeriesPoint> Points);
+    string Key, string Label, string Unit, bool IsTemporal, bool IsPartToWhole,
+    IReadOnlyList<SeriesPoint> Points);
 
 public sealed record ReportTable(
     IReadOnlyList<ResultColumn> Columns, IReadOnlyList<IReadOnlyList<string?>> Rows);
@@ -30,6 +31,7 @@ public sealed record Provenance(
 
 public sealed record ReportSection(
     string Model,
+    string? Label,
     string Sql,
     IReadOnlyList<KpiTile> Kpis,
     IReadOnlyList<ChartSeries> Charts,

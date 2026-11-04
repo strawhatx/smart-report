@@ -18,4 +18,39 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!--
+    Tailwind runs as part of the build, so `dotnet run` and F5 need nothing installed beyond the
+    .NET SDK. The CLI is a standalone binary (no npm, no node_modules); if it is missing, the
+    fetch script pulls the pinned version first.
+  -->
+  <PropertyGroup>
+    <TailwindDir>$(MSBuildThisFileDirectory)..\..\tools\tailwind\</TailwindDir>
+    <TailwindExe>$(TailwindDir)tailwindcss</TailwindExe>
+    <TailwindExe Condition="'$(OS)' == 'Windows_NT'">$(TailwindDir)tailwindcss.exe</TailwindExe>
+    <TailwindInput>$(MSBuildThisFileDirectory)Styles\app.css</TailwindInput>
+    <TailwindOutput>$(MSBuildThisFileDirectory)wwwroot\css\app.css</TailwindOutput>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Anything Tailwind scans for class names is an input, so the rebuild is incremental. -->
+    <TailwindSource Include="$(MSBuildThisFileDirectory)Styles\**\*.css" />
+    <TailwindSource Include="$(MSBuildThisFileDirectory)Pages\**\*.cshtml" />
+    <TailwindSource Include="$(MSBuildThisFileDirectory)wwwroot\js\**\*.js" />
+  </ItemGroup>
+
+  <Target Name="EnsureTailwindCli" BeforeTargets="BuildTailwind" Condition="!Exists('$(TailwindExe)')">
+    <Message Importance="high" Text="Tailwind CLI not found - fetching the pinned release..." />
+    <Exec Command="sh &quot;$(MSBuildThisFileDirectory)..\..\scripts\get-tailwind.sh&quot;"
+          Condition="'$(OS)' != 'Windows_NT'" />
+    <Error Condition="'$(OS)' == 'Windows_NT'"
+           Text="Download tailwindcss-windows-x64.exe into tools\tailwind\tailwindcss.exe (see scripts/get-tailwind.sh)." />
+  </Target>
+
+  <Target Name="BuildTailwind" BeforeTargets="BeforeBuild"
+          Inputs="@(TailwindSource)" Outputs="$(TailwindOutput)">
+    <MakeDir Directories="$(MSBuildThisFileDirectory)wwwroot\css" />
+    <Exec Command="&quot;$(TailwindExe)&quot; --input &quot;$(TailwindInput)&quot; --output &quot;$(TailwindOutput)&quot; --minify"
+          StandardOutputImportance="low" />
+  </Target>
+
 </Project>

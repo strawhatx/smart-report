@@ -1,21 +1,20 @@
 namespace SmartReport.App.Pages;
 
 /// <summary>
-/// Labels for the development sign-in switcher.
+/// The two identities the portal can sign in as.
 ///
 /// <para>
-/// Display text only — selecting one of these grants nothing. The chosen key still has to resolve
-/// through <c>PrincipalDirectory</c>, and the role still comes from that employee's row (A5).
+/// Display text only — picking one grants nothing. The key still has to resolve through
+/// <c>PrincipalDirectory</c>, and the role still comes from that user's row (A5).
 /// </para>
 /// </summary>
 public static class DemoPrincipalList
 {
-    public sealed record Demo(string Key, string Label);
+    public sealed record Demo(string Key, string Name, string Role);
 
     public static readonly IReadOnlyList<Demo> All =
     [
-        new(SmartReport.Data.DemoPrincipals.Analyst, "Dana · Analyst"),
-        new(SmartReport.Data.DemoPrincipals.RegionalManager, "Marcus · Regional Mgr"),
-        new(SmartReport.Data.DemoPrincipals.HrDirector, "Priya · HR Director"),
+        new(SmartReport.Data.DemoPrincipals.Coordinator, "Dana Whitfield", "Warehouse Coordinator"),
+        new(SmartReport.Data.DemoPrincipals.AccountOwner, "Priya Shah", "Account Owner"),
     ];
 }

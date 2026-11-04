@@ -99,7 +99,7 @@ public sealed class SecurityHeaderTests(PostgresFixture fixture) : IAsyncLifetim
     [Fact]
     public async Task Per_user_pages_are_never_cached()
     {
-        var response = await _client.GetAsync("/reports");
+        var response = await _client.GetAsync("/portal/reports");
 
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
     }

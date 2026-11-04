@@ -30,9 +30,9 @@ public class SqlCompilerTests
         // rather than for the character.
         foreach (var query in new[]
         {
-            new SpecQuery("sales", ["revenue"], ["region"], [], null),
-            new SpecQuery("attrition", ["turnover_cost"], ["department"], [], null),
-            new SpecQuery("programs", ["program_budget"], ["program"], [], null),
+            new SpecQuery("shipping", ["orders_shipped"], ["carrier"], [], null),
+            new SpecQuery("returns", ["refund_value"], ["reason"], [], null),
+            new SpecQuery("inventory", ["units_on_hand"], ["product"], [], null),
         })
         {
             var sql = Compile(query).Sql;
@@ -45,8 +45,8 @@ public class SqlCompilerTests
     [Fact]
     public void Binds_filter_values_as_parameters_instead_of_writing_them_into_the_sql()
     {
-        var compiled = Compile(new SpecQuery("sales", ["revenue"], ["region"],
-            [new SpecFilter("region", FilterOp.Eq, ["North"])], null));
+        var compiled = Compile(new SpecQuery("shipping", ["orders_shipped"], ["carrier"],
+            [new SpecFilter("carrier", FilterOp.Eq, ["North"])], null));
 
         Assert.DoesNotContain("North", compiled.Sql, StringComparison.Ordinal);
         Assert.Contains("@p0", compiled.Sql, StringComparison.Ordinal);
@@ -60,8 +60,8 @@ public class SqlCompilerTests
         // reach the database as data, not as SQL.
         const string hostile = "North'; DROP TABLE orders; --";
 
-        var compiled = Compile(new SpecQuery("sales", ["revenue"], ["region"],
-            [new SpecFilter("region", FilterOp.Eq, [hostile])], null));
+        var compiled = Compile(new SpecQuery("shipping", ["orders_shipped"], ["carrier"],
+            [new SpecFilter("carrier", FilterOp.Eq, [hostile])], null));
 
         Assert.DoesNotContain("DROP TABLE", compiled.Sql, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(hostile, Assert.Single(compiled.Parameters).Value);
@@ -70,8 +70,8 @@ public class SqlCompilerTests
     [Fact]
     public void An_in_filter_binds_one_array_parameter_not_many_fragments()
     {
-        var compiled = Compile(new SpecQuery("sales", ["revenue"], ["region"],
-            [new SpecFilter("region", FilterOp.In, ["North", "South", "East"])], null));
+        var compiled = Compile(new SpecQuery("shipping", ["orders_shipped"], ["carrier"],
+            [new SpecFilter("carrier", FilterOp.In, ["North", "South", "East"])], null));
 
         Assert.Contains("= ANY(@p0)", compiled.Sql, StringComparison.Ordinal);
         Assert.Single(compiled.Parameters);
@@ -81,8 +81,8 @@ public class SqlCompilerTests
     [Fact]
     public void A_date_range_is_half_open_so_a_quarter_does_not_swallow_the_next_one()
     {
-        var compiled = Compile(new SpecQuery("sales", ["revenue"], ["region"],
-            [new SpecFilter("ordered_at", FilterOp.Between, ["2025-07-01", "2025-10-01"])], null));
+        var compiled = Compile(new SpecQuery("shipping", ["orders_shipped"], ["carrier"],
+            [new SpecFilter("shipped_at", FilterOp.Between, ["2025-07-01", "2025-10-01"])], null));
 
         Assert.Contains(">= @p0", compiled.Sql, StringComparison.Ordinal);
         Assert.Contains("< @p1", compiled.Sql, StringComparison.Ordinal);
@@ -92,8 +92,8 @@ public class SqlCompilerTests
     [Fact]
     public void Like_wildcards_in_a_user_value_are_escaped()
     {
-        var compiled = Compile(new SpecQuery("sales", ["revenue"], ["product"],
-            [new SpecFilter("product_category", FilterOp.Contains, ["100%_pure"])], null));
+        var compiled = Compile(new SpecQuery("shipping", ["orders_shipped"], ["service"],
+            [new SpecFilter("channel", FilterOp.Contains, ["100%_pure"])], null));
 
         // The user's % and _ must match literally, not act as wildcards.
         Assert.Equal(@"%100\%\_pure%", compiled.Parameters[0].Value);
@@ -103,7 +103,7 @@ public class SqlCompilerTests
     [Fact]
     public void Groups_by_ordinal_position()
     {
-        var sql = Compile(new SpecQuery("sales", ["revenue"], ["region", "product_category"], [], null)).Sql;
+        var sql = Compile(new SpecQuery("shipping", ["orders_shipped"], ["carrier", "channel"], [], null)).Sql;
 
         Assert.Contains("GROUP BY 1, 2", sql, StringComparison.Ordinal);
     }
@@ -111,7 +111,7 @@ public class SqlCompilerTests
     [Fact]
     public void Orders_a_time_series_chronologically()
     {
-        var sql = Compile(new SpecQuery("sales", ["revenue"], ["month"], [], null)).Sql;
+        var sql = Compile(new SpecQuery("shipping", ["orders_shipped"], ["month"], [], null)).Sql;
 
         Assert.Contains("ORDER BY 1 ASC", sql, StringComparison.Ordinal);
     }
@@ -119,7 +119,7 @@ public class SqlCompilerTests
     [Fact]
     public void Orders_a_categorical_breakdown_largest_first()
     {
-        var sql = Compile(new SpecQuery("sales", ["revenue"], ["region"], [], null)).Sql;
+        var sql = Compile(new SpecQuery("shipping", ["orders_shipped"], ["carrier"], [], null)).Sql;
 
         Assert.Contains("ORDER BY 2 DESC NULLS LAST", sql, StringComparison.Ordinal);
     }
@@ -127,27 +127,27 @@ public class SqlCompilerTests
     [Fact]
     public void Always_applies_a_limit()
     {
-        Assert.Contains("LIMIT ", Compile(new SpecQuery("sales", ["revenue"], [], [], null)).Sql,
+        Assert.Contains("LIMIT ", Compile(new SpecQuery("shipping", ["orders_shipped"], [], [], null)).Sql,
             StringComparison.Ordinal);
     }
 
     [Fact]
     public void Describes_its_result_columns_for_rendering()
     {
-        var compiled = Compile(new SpecQuery("sales", ["revenue", "order_count"], ["region"], [], null));
+        var compiled = Compile(new SpecQuery("shipping", ["orders_shipped", "late_shipments"], ["carrier"], [], null));
 
-        Assert.Equal(["region", "revenue", "order_count"], compiled.Columns.Select(c => c.Key));
+        Assert.Equal(["carrier", "orders_shipped", "late_shipments"], compiled.Columns.Select(c => c.Key));
         Assert.Single(compiled.Dimensions);
         Assert.Equal(2, compiled.Metrics.Count);
-        Assert.Equal("currency", compiled.Columns.Single(c => c.Key == "revenue").Unit);
+        Assert.Equal("number", compiled.Columns.Single(c => c.Key == "orders_shipped").Unit);
     }
 
     [Fact]
     public void Reports_the_tables_it_read_for_provenance()
     {
-        var compiled = Compile(new SpecQuery("sales", ["revenue"], ["region"], [], null));
+        var compiled = Compile(new SpecQuery("shipping", ["orders_shipped"], ["carrier"], [], null));
 
+        Assert.Contains("shipments", compiled.Tables);
         Assert.Contains("orders", compiled.Tables);
-        Assert.Contains("order_items", compiled.Tables);
     }
 }

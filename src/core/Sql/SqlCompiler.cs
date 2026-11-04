@@ -35,7 +35,8 @@ public sealed class SqlCompiler(DataCatalog catalog)
         {
             var dimension = model.Dimension(key)!;
             selectParts.Add($"  {dimension.Expression} AS {Quote(dimension.Key)}");
-            columns.Add(new ResultColumn(dimension.Key, dimension.Label, IsMetric: false, "text", dimension.IsTemporal));
+            columns.Add(new ResultColumn(dimension.Key, dimension.Label, IsMetric: false, "text",
+                dimension.IsTemporal, dimension.IsPartToWhole));
         }
 
         foreach (var key in query.Metrics)
@@ -49,6 +50,20 @@ public sealed class SqlCompiler(DataCatalog catalog)
         sql.Append("FROM ").AppendLine(model.From);
 
         var predicates = new List<string>();
+
+        // Safeguards first, and unconditionally. These are not filters the planner chose and not
+        // checks the policy engine might have skipped — they are welded into every query against
+        // the model, for every principal. The minimum-cohort floor on benchmarks is one of these:
+        // a cohort of three clients returns nothing rather than three clients' averages in a
+        // disguise. The value is bound, never interpolated.
+        foreach (var safeguard in model.Safeguards)
+        {
+            predicates.Add(string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                safeguard.ExpressionFormat,
+                Bind(parameters, safeguard.Value)));
+        }
+
         foreach (var filter in query.Filters)
         {
             predicates.Add(BuildPredicate(model.Filter(filter.Field)!, filter, parameters));
@@ -71,7 +86,7 @@ public sealed class SqlCompiler(DataCatalog catalog)
 
         sql.Append("LIMIT ").Append(governed.RowLimit.ToString(CultureInfo.InvariantCulture)).Append(';');
 
-        return new CompiledQuery(model.Key, sql.ToString(), parameters, columns, model.Tables);
+        return new CompiledQuery(model.Key, query.Label, sql.ToString(), parameters, columns, model.Tables);
     }
 
     /// <summary>

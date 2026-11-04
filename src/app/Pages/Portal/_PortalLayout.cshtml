@@ -1,0 +1,84 @@
+@using SmartReport.Core.Policy
+@{
+    var principal = ViewData["Principal"] as Principal;
+    var tab = ViewData["Tab"] as string ?? "report";
+}
+<!DOCTYPE html>
+<html lang="en" dir="ltr" class="h-full">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Smart Reports · Northpoint</title>
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="~/favicon.ico" />
+    <link rel="stylesheet" href="~/css/app.css" asp-append-version="true" />
+</head>
+<body class="h-full bg-paper">
+<a href="#canvas" class="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded focus:bg-ink focus:px-4 focus:py-2 focus:text-paper">Skip to the report</a>
+
+<div class="flex h-full flex-col lg:p-4">
+  <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface lg:rounded-2xl lg:border lg:border-rule lg:shadow-sm">
+
+    <header class="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-rule px-4 py-3 sm:px-5">
+        <a href="/" class="flex shrink-0 items-center gap-2">
+            <span class="grid size-7 place-items-center rounded-lg bg-brand text-white" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" class="size-4">
+                    <path d="M12 2.6 20.5 7v10L12 21.4 3.5 17V7z" stroke-linejoin="round"/>
+                    <path d="M3.5 7 12 11.5 20.5 7M12 11.5V21" stroke-linejoin="round"/>
+                </svg>
+            </span>
+            <span class="font-bold tracking-[-0.02em]">Northpoint</span>
+        </a>
+
+        @if (principal is not null)
+        {
+            <nav aria-label="Breadcrumb" class="hidden items-center gap-2 text-[15px] text-ink-soft md:flex">
+                <span aria-hidden="true">/</span>
+                <span class="font-semibold text-ink">@principal.ClientName</span>
+                <span aria-hidden="true">/</span>
+                <span>Smart Reports</span>
+            </nav>
+        }
+
+        <span class="label-mono hidden rounded-md border border-rule px-2 py-1 sm:inline-block">Prototype · sample data</span>
+
+        @* Report | Library. Real links, so the tabs work without JavaScript. *@
+        <div class="order-last w-full sm:order-none sm:w-auto">
+            <div class="inline-flex rounded-lg bg-sunk p-1" role="tablist" aria-label="View">
+                <a href="/portal/reports" role="tab" aria-selected="@(tab == "report")"
+                   class="@(tab == "report" ? "bg-surface shadow-sm" : "text-ink-soft hover:text-ink") rounded-md px-4 py-1.5 text-[14px] font-semibold">
+                    Report
+                </a>
+                <a href="/portal/library" role="tab" aria-selected="@(tab == "library")"
+                   class="@(tab == "library" ? "bg-surface shadow-sm" : "text-ink-soft hover:text-ink") rounded-md px-4 py-1.5 text-[14px] font-semibold">
+                    Library
+                </a>
+            </div>
+        </div>
+
+        @* The identity switcher. Development only, and labelled as such (A12). On a phone it
+           shows first names only — the full role is a desktop luxury, and wrapping it onto its
+           own line pushes the report below the fold. *@
+        <div class="ml-auto flex items-center gap-1.5">
+            <span class="hidden text-[14px] text-ink-soft xl:inline">Signed in as</span>
+            @foreach (var demo in DemoPrincipalList.All)
+            {
+                var current = principal?.Key == demo.Key;
+                <form method="post" action="/dev/signin-as/@demo.Key">
+                    <input type="hidden" name="returnUrl" value="@Context.Request.Path@Context.Request.QueryString" />
+                    <button type="submit" aria-pressed="@current.ToString().ToLowerInvariant()"
+                            class="@(current ? "bg-ink text-paper" : "border border-rule text-ink-soft hover:border-ink-faint") rounded-lg px-2.5 py-1.5 text-[13px] font-semibold whitespace-nowrap">
+                        @demo.Name.Split(' ')[0]<span class="hidden lg:inline"> · @demo.Role</span>
+                    </button>
+                </form>
+            }
+        </div>
+    </header>
+
+    @RenderBody()
+  </div>
+</div>
+
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

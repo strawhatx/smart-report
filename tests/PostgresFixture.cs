@@ -80,12 +80,12 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     /// <summary>Opens a connection as the application role with the given principal applied.</summary>
     public async Task<(NpgsqlConnection Connection, NpgsqlTransaction Transaction)> OpenAsAsync(
-        string principalKey, string? role, int? regionId)
+        string principalKey, string? role, int? clientId)
     {
         var connection = await AppDatabase.OpenAsync(CancellationToken.None);
         var transaction = await AppDatabase.BeginAsync(connection, CancellationToken.None);
         await AppDatabase.ApplyPrincipalAsync(
-            connection, transaction, principalKey, role, regionId, CancellationToken.None);
+            connection, transaction, principalKey, role, clientId, CancellationToken.None);
         return (connection, transaction);
     }
 

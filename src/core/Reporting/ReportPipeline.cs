@@ -77,7 +77,8 @@ public sealed class ReportPipeline(
 
         if (governed.IsRefused)
         {
-            yield return new ReportEvent.Refused(governed.RefusalReason);
+            var denial = governed.Decisions.FirstOrDefault(d => d.Outcome == PolicyOutcome.Denied);
+            yield return new ReportEvent.Refused(governed.RefusalReason, denial?.Remedy);
             yield return new ReportEvent.Done();
             yield break;
         }

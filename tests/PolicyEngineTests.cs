@@ -16,92 +16,96 @@ public class PolicyEngineTests
         return _policy.Govern(validated.Spec!, principal);
     }
 
-    private static ReportSpec Salaries() => new("Average salary by department",
-        [new SpecQuery("compensation", ["avg_salary"], ["department"], [], null)]);
+    private static ReportSpec Billing() => new("Fees",
+        [new SpecQuery("billing", ["total_fees"], ["fee_type"], [], null)]);
 
-    private static ReportSpec Revenue() => new("Revenue by region",
-        [new SpecQuery("sales", ["revenue"], ["region"], [], null)]);
+    private static ReportSpec Shipping() => new("Shipping",
+        [new SpecQuery("shipping", ["orders_shipped"], ["carrier"], [], null)]);
+
+    private static ReportSpec CarrierCosts() => new("Costs",
+        [new SpecQuery("carrier_costs", ["avg_cost_per_label"], ["carrier"], [], null)]);
 
     [Fact]
-    public void Analyst_asking_for_salary_is_refused_with_a_reason()
+    public void The_coordinator_is_refused_billing_and_pointed_at_the_owner()
     {
-        var governed = Govern(Salaries(), TestPrincipals.Dana);
+        var governed = Govern(Billing(), TestPrincipals.Dana);
 
         Assert.True(governed.IsRefused);
-        Assert.Empty(governed.Queries);
-        Assert.Contains("HR Director", governed.RefusalReason);
-        Assert.Contains(governed.Decisions,
-            d => d.Outcome == PolicyOutcome.Denied && d.Subject == "metric:avg_salary");
+        var denial = Assert.Single(governed.Decisions, d => d.Outcome == PolicyOutcome.Denied);
+        Assert.Contains("account owner", denial.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Priya Shah", denial.Remedy!, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Hr_director_asking_for_salary_is_allowed()
+    public void The_account_owner_is_allowed_billing()
     {
-        var governed = Govern(Salaries(), TestPrincipals.Priya);
-
-        Assert.False(governed.IsRefused);
-        Assert.Single(governed.Queries);
-        Assert.Contains("compensation", governed.TablesRead);
+        Assert.False(Govern(Billing(), TestPrincipals.Priya).IsRefused);
     }
 
     [Fact]
-    public void A_refusal_names_the_withheld_measure()
+    public void Northpoint_internal_costs_are_refused_to_every_client_role()
     {
-        var governed = Govern(Salaries(), TestPrincipals.Dana);
-
-        Assert.Contains("avg_salary", governed.Withheld);
-    }
-
-    [Fact]
-    public void Regional_manager_is_told_their_rows_are_scoped()
-    {
-        var governed = Govern(Revenue(), TestPrincipals.Marcus);
-
-        var scope = Assert.Single(governed.Decisions, d => d.Outcome == PolicyOutcome.Scoped);
-        Assert.Contains("North", scope.Reason);
-    }
-
-    [Fact]
-    public void Unscoped_principals_get_no_scoping_notice()
-    {
-        var governed = Govern(Revenue(), TestPrincipals.Dana);
-
-        Assert.DoesNotContain(governed.Decisions, d => d.Outcome == PolicyOutcome.Scoped);
-    }
-
-    [Fact]
-    public void Revenue_is_available_to_every_role()
-    {
-        foreach (var principal in new[] { TestPrincipals.Dana, TestPrincipals.Marcus, TestPrincipals.Priya })
+        foreach (var principal in new[] { TestPrincipals.Dana, TestPrincipals.Priya })
         {
-            Assert.False(Govern(Revenue(), principal).IsRefused);
+            var governed = Govern(CarrierCosts(), principal);
+
+            Assert.True(governed.IsRefused);
+            var denial = Assert.Single(governed.Decisions, d => d.Outcome == PolicyOutcome.Denied);
+            Assert.Contains("internal", denial.Reason, StringComparison.OrdinalIgnoreCase);
         }
     }
 
     [Fact]
-    public void A_mixed_report_keeps_the_allowed_query_and_drops_the_denied_one()
+    public void A_refusal_only_suggests_an_alternative_the_asker_may_actually_use()
     {
-        // Turnover cost beside programme budget is fine; salary alongside them is not.
-        var spec = new ReportSpec("Turnover vs budget",
+        // carrier_costs points at shipping.billed_cost_per_shipment, which both roles can see.
+        var denial = Assert.Single(
+            Govern(CarrierCosts(), TestPrincipals.Dana).Decisions,
+            d => d.Outcome == PolicyOutcome.Denied);
+
+        Assert.Contains("billed cost per shipment", denial.Remedy!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Shipping_is_available_to_both_roles()
+    {
+        foreach (var principal in new[] { TestPrincipals.Dana, TestPrincipals.Priya })
+        {
+            Assert.False(Govern(Shipping(), principal).IsRefused);
+        }
+    }
+
+    [Fact]
+    public void Every_answered_report_states_whose_data_it_read()
+    {
+        var scope = Assert.Single(
+            Govern(Shipping(), TestPrincipals.Dana).Decisions,
+            d => d.Outcome == PolicyOutcome.Scoped);
+
+        Assert.Contains("Trailhead Coffee Co.", scope.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_mixed_report_keeps_what_is_allowed_and_drops_what_is_not()
+    {
+        var spec = new ReportSpec("Mixed",
         [
-            new SpecQuery("attrition", ["turnover_cost"], ["department"], [], null),
-            new SpecQuery("compensation", ["total_payroll"], ["department"], [], null),
+            new SpecQuery("shipping", ["orders_shipped"], ["carrier"], [], null),
+            new SpecQuery("billing", ["total_fees"], ["fee_type"], [], null),
         ]);
 
         var governed = Govern(spec, TestPrincipals.Dana);
 
         Assert.False(governed.IsRefused);
         Assert.Single(governed.Queries);
-        Assert.Equal("attrition", governed.Queries[0].Query.Model);
-        Assert.Contains(governed.Decisions,
-            d => d.Outcome == PolicyOutcome.Denied && d.Subject == "metric:total_payroll");
+        Assert.Equal("shipping", governed.Queries[0].Query.Model);
     }
 
     [Fact]
-    public void Row_limits_are_capped_whatever_the_spec_asked_for()
+    public void Row_limits_are_capped_whatever_was_asked_for()
     {
         var spec = new ReportSpec("Everything",
-            [new SpecQuery("sales", ["revenue"], ["region"], [], int.MaxValue)]);
+            [new SpecQuery("shipping", ["orders_shipped"], ["carrier"], [], int.MaxValue)]);
 
         Assert.True(Govern(spec, TestPrincipals.Dana).Queries[0].RowLimit <= SpecLimits.MaxRowLimit);
     }

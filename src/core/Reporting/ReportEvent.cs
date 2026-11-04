@@ -25,8 +25,15 @@ public abstract record ReportEvent(string Name)
 
     public sealed record Document(ReportDocument Report) : ReportEvent("document");
 
-    /// <summary>The question was understood and deliberately not answered.</summary>
-    public sealed record Refused(string Message) : ReportEvent("refused");
+    /// <summary>
+    /// The question was understood and deliberately not answered.
+    /// </summary>
+    /// <param name="Remedy">
+    /// What the asker can do about it, where there is something — a named person to request
+    /// access from, or a measure they are already allowed. Carried here as well as on the
+    /// decision, because the refusal panel is where the reader is looking.
+    /// </param>
+    public sealed record Refused(string Message, string? Remedy = null) : ReportEvent("refused");
 
     /// <summary>Something went wrong. Carries a safe message only (C5).</summary>
     public sealed record Failed(string Message) : ReportEvent("failed");

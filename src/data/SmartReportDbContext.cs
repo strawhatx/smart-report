@@ -7,23 +7,23 @@ namespace SmartReport.Data;
 public sealed class SmartReportDbContext(DbContextOptions<SmartReportDbContext> options)
     : DbContext(options)
 {
-    public DbSet<Region> Regions => Set<Region>();
-    public DbSet<Department> Departments => Set<Department>();
+    public DbSet<Client> Clients => Set<Client>();
+    public DbSet<ClientUser> ClientUsers => Set<ClientUser>();
     public DbSet<Product> Products => Set<Product>();
-    public DbSet<Employee> Employees => Set<Employee>();
-    public DbSet<Compensation> Compensation => Set<Compensation>();
-    public DbSet<HeadcountMonthly> HeadcountMonthly => Set<HeadcountMonthly>();
-    public DbSet<AttritionEvent> AttritionEvents => Set<AttritionEvent>();
-    public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
-    public DbSet<Entities.Program> Programs => Set<Entities.Program>();
+    public DbSet<Shipment> Shipments => Set<Shipment>();
+    public DbSet<Return> Returns => Set<Return>();
+    public DbSet<Fee> Fees => Set<Fee>();
+    public DbSet<CarrierContractRate> CarrierContractRates => Set<CarrierContractRate>();
+    public DbSet<BenchmarkMetric> BenchmarkMetrics => Set<BenchmarkMetric>();
+    public DbSet<ReportTemplate> ReportTemplates => Set<ReportTemplate>();
     public DbSet<SavedReport> SavedReports => Set<SavedReport>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // The catalog's SQL expressions are written against snake_case physical names, so the
-        // mapping is enforced here rather than left to per-property attributes that could drift.
+        // mapping is enforced here rather than left to attributes that could drift out of sync.
         foreach (var entity in modelBuilder.Model.GetEntityTypes())
         {
             entity.SetTableName(ToSnakeCase(entity.GetTableName()!));
@@ -34,66 +34,99 @@ public sealed class SmartReportDbContext(DbContextOptions<SmartReportDbContext> 
             }
         }
 
-        modelBuilder.Entity<Region>(b => b.Property(r => r.Name).HasMaxLength(60).IsRequired());
-        modelBuilder.Entity<Department>(b => b.Property(d => d.Name).HasMaxLength(80).IsRequired());
+        modelBuilder.Entity<Client>(b =>
+        {
+            b.Property(c => c.Id).ValueGeneratedNever();
+            b.Property(c => c.Name).HasMaxLength(120).IsRequired();
+            b.Property(c => c.Slug).HasMaxLength(60).IsRequired();
+            b.HasIndex(c => c.Slug).IsUnique();
+        });
+
+        modelBuilder.Entity<ClientUser>(b =>
+        {
+            b.Property(u => u.Id).ValueGeneratedNever();
+            b.Property(u => u.FullName).HasMaxLength(120).IsRequired();
+            b.Property(u => u.Email).HasMaxLength(160).IsRequired();
+            b.Property(u => u.Role).HasMaxLength(40).IsRequired();
+            b.Property(u => u.JobTitle).HasMaxLength(80).IsRequired();
+            b.Property(u => u.PrincipalKey).HasMaxLength(40);
+            b.HasIndex(u => u.PrincipalKey).IsUnique();
+            b.HasIndex(u => u.ClientId);
+        });
 
         modelBuilder.Entity<Product>(b =>
         {
-            b.Property(p => p.Name).HasMaxLength(120).IsRequired();
-            b.Property(p => p.Category).HasMaxLength(60).IsRequired();
-            b.Property(p => p.UnitPrice).HasPrecision(12, 2);
-        });
-
-        modelBuilder.Entity<Employee>(b =>
-        {
-            b.Property(e => e.FullName).HasMaxLength(120).IsRequired();
-            b.Property(e => e.Email).HasMaxLength(160).IsRequired();
-            b.Property(e => e.Role).HasMaxLength(40).IsRequired();
-            b.Property(e => e.PrincipalKey).HasMaxLength(40);
-            b.HasIndex(e => e.PrincipalKey).IsUnique();
-            b.HasIndex(e => e.RegionId);
-        });
-
-        modelBuilder.Entity<Compensation>(b =>
-        {
-            b.Property(c => c.AnnualSalary).HasPrecision(12, 2);
-            b.HasIndex(c => c.EmployeeId);
-            b.HasIndex(c => c.RegionId);
-        });
-
-        modelBuilder.Entity<HeadcountMonthly>(b => b.HasIndex(h => new { h.RegionId, h.Month }));
-
-        modelBuilder.Entity<AttritionEvent>(b =>
-        {
-            b.Property(a => a.Reason).HasMaxLength(60).IsRequired();
-            b.Property(a => a.ReplacementCost).HasPrecision(12, 2);
-            b.HasIndex(a => new { a.RegionId, a.EventDate });
-        });
-
-        modelBuilder.Entity<Customer>(b =>
-        {
-            b.Property(c => c.Name).HasMaxLength(120).IsRequired();
-            b.HasIndex(c => c.RegionId);
+            b.Property(p => p.Id).ValueGeneratedNever();
+            b.Property(p => p.Sku).HasMaxLength(40).IsRequired();
+            b.Property(p => p.Name).HasMaxLength(140).IsRequired();
+            b.HasIndex(p => p.ClientId);
         });
 
         modelBuilder.Entity<Order>(b =>
         {
+            b.Property(o => o.Id).ValueGeneratedNever();
+            b.Property(o => o.Channel).HasMaxLength(40).IsRequired();
             b.Property(o => o.Status).HasMaxLength(30).IsRequired();
-            b.HasIndex(o => new { o.RegionId, o.OrderedAt });
+            b.HasIndex(o => new { o.ClientId, o.OrderedAt });
         });
 
         modelBuilder.Entity<OrderItem>(b =>
         {
-            b.Property(i => i.UnitPrice).HasPrecision(12, 2);
-            b.HasIndex(i => i.OrderId);
-            b.HasIndex(i => i.RegionId);
+            b.Property(i => i.Id).ValueGeneratedNever();
+            b.HasIndex(i => new { i.ClientId, i.OrderId });
         });
 
-        modelBuilder.Entity<Entities.Program>(b =>
+        modelBuilder.Entity<Shipment>(b =>
         {
-            b.Property(p => p.Name).HasMaxLength(120).IsRequired();
-            b.Property(p => p.BudgetAmount).HasPrecision(12, 2);
-            b.Property(p => p.SpendAmount).HasPrecision(12, 2);
+            b.Property(s => s.Id).ValueGeneratedNever();
+            b.Property(s => s.Carrier).HasMaxLength(40).IsRequired();
+            b.Property(s => s.Service).HasMaxLength(40).IsRequired();
+            b.Property(s => s.BilledAmount).HasPrecision(10, 2);
+            b.HasIndex(s => new { s.ClientId, s.ShippedAt });
+        });
+
+        modelBuilder.Entity<Return>(b =>
+        {
+            b.Property(r => r.Id).ValueGeneratedNever();
+            b.Property(r => r.Reason).HasMaxLength(60).IsRequired();
+            b.Property(r => r.RefundAmount).HasPrecision(10, 2);
+            b.HasIndex(r => new { r.ClientId, r.ReceivedAt });
+        });
+
+        modelBuilder.Entity<Fee>(b =>
+        {
+            b.Property(f => f.Id).ValueGeneratedNever();
+            b.Property(f => f.FeeType).HasMaxLength(60).IsRequired();
+            b.Property(f => f.Amount).HasPrecision(12, 2);
+            b.HasIndex(f => new { f.ClientId, f.PeriodMonth });
+        });
+
+        modelBuilder.Entity<CarrierContractRate>(b =>
+        {
+            b.Property(r => r.Id).ValueGeneratedNever();
+            b.Property(r => r.Carrier).HasMaxLength(40).IsRequired();
+            b.Property(r => r.Service).HasMaxLength(40).IsRequired();
+            b.Property(r => r.CostPerLabel).HasPrecision(8, 3);
+        });
+
+        modelBuilder.Entity<BenchmarkMetric>(b =>
+        {
+            b.Property(m => m.Id).ValueGeneratedNever();
+            b.Property(m => m.MetricKey).HasMaxLength(60).IsRequired();
+            b.Property(m => m.DimensionKey).HasMaxLength(40).IsRequired();
+            b.Property(m => m.DimensionValue).HasMaxLength(60).IsRequired();
+            b.Property(m => m.P25).HasPrecision(10, 3);
+            b.Property(m => m.P50).HasPrecision(10, 3);
+            b.Property(m => m.P75).HasPrecision(10, 3);
+            b.HasIndex(m => new { m.MetricKey, m.PeriodMonth });
+        });
+
+        modelBuilder.Entity<ReportTemplate>(b =>
+        {
+            b.Property(t => t.Id).ValueGeneratedNever();
+            b.Property(t => t.Title).HasMaxLength(120).IsRequired();
+            b.Property(t => t.Question).HasMaxLength(400).IsRequired();
+            b.Property(t => t.Category).HasMaxLength(40).IsRequired();
         });
 
         modelBuilder.Entity<SavedReport>(b =>
@@ -101,8 +134,7 @@ public sealed class SmartReportDbContext(DbContextOptions<SmartReportDbContext> 
             b.Property(r => r.OwnerKey).HasMaxLength(40).IsRequired();
             b.Property(r => r.Title).HasMaxLength(160).IsRequired();
             b.Property(r => r.Question).HasMaxLength(500).IsRequired();
-            b.Property(r => r.SpecJson).IsRequired();
-            b.HasIndex(r => r.OwnerKey);
+            b.HasIndex(r => new { r.ClientId, r.OwnerKey });
         });
     }
 

@@ -57,17 +57,16 @@ if (ownerConnection is not null)
 builder.Services.Configure<AiOptions>(builder.Configuration.GetSection(AiOptions.SectionName));
 var aiOptions = builder.Configuration.GetSection(AiOptions.SectionName).Get<AiOptions>() ?? new AiOptions();
 
-if (string.Equals(aiOptions.Provider, "ollama", StringComparison.OrdinalIgnoreCase))
+if (aiOptions.IsScripted)
 {
-    builder.Services.AddHttpClient<IReportPlanner, OllamaReportPlanner>(client =>
-    {
-        client.BaseAddress = new Uri(aiOptions.BaseUrl);
-        client.Timeout = TimeSpan.FromSeconds(aiOptions.TimeoutSeconds);
-    });
+    builder.Services.AddSingleton<IReportPlanner, ScriptedReportPlanner>();
 }
 else
 {
-    builder.Services.AddSingleton<IReportPlanner, ScriptedReportPlanner>();
+    // One interface, whichever provider is configured. Built once at startup so a missing key
+    // fails here rather than on someone's first question.
+    builder.Services.AddSingleton(ChatClientFactory.Create(aiOptions));
+    builder.Services.AddSingleton<IReportPlanner, ChatReportPlanner>();
 }
 
 // --- Authentication. The cookie carries a principal key and nothing else (A1, A5).

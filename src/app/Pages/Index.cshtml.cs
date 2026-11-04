@@ -1,14 +1,18 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using SmartReport.App.Security;
 
 namespace SmartReport.App.Pages;
 
 /// <summary>
-/// The landing page. Public and cacheable — it reads the principal only to show who is signed
-/// in, never to decide what to render.
+/// Northpoint's marketing page: the door into the portal.
+///
+/// <para>
+/// Public and cacheable. It reads no principal and no data — the only live thing on it is the
+/// link to Smart Reports.
+/// </para>
 /// </summary>
-public sealed class IndexModel(PrincipalContext principals) : PageModel
+public sealed class IndexModel : PageModel
 {
-    public async Task OnGetAsync(CancellationToken cancellationToken) =>
-        ViewData["Principal"] = await principals.GetAsync(cancellationToken);
+    public void OnGet()
+    {
+    }
 }

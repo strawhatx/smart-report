@@ -59,7 +59,7 @@ public static class ReportBuilder
             ? BuildCharts(query, result)
             : [];
 
-        return new ReportSection(query.Model, query.Sql, kpis, charts, BuildTable(query, result));
+        return new ReportSection(query.Model, query.Label, query.Sql, kpis, charts, BuildTable(query, result));
     }
 
     private static IReadOnlyList<KpiTile> BuildKpis(CompiledQuery query, QueryResult result)
@@ -94,6 +94,7 @@ public static class ReportBuilder
 
         var series = new List<ChartSeries>();
         var temporal = query.Columns[labelIndex].IsTemporal;
+        var partToWhole = query.Columns[labelIndex].IsPartToWhole;
 
         for (var i = 0; i < query.Columns.Count; i++)
         {
@@ -107,7 +108,7 @@ public static class ReportBuilder
                 .Select(row => new SeriesPoint(AsText(row[labelIndex]) ?? "—", AsDecimal(row[i])))
                 .ToArray();
 
-            series.Add(new ChartSeries(column.Key, column.Label, column.Unit, temporal, points));
+            series.Add(new ChartSeries(column.Key, column.Label, column.Unit, temporal, partToWhole, points));
         }
 
         return series;

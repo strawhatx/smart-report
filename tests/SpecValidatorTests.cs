@@ -10,20 +10,20 @@ public class SpecValidatorTests
     private static ReportSpec Spec(params SpecQuery[] queries) => new("Test", queries);
 
     private static SpecQuery Query(
-        string model = "sales",
+        string model = "shipping",
         string[]? metrics = null,
         string[]? dimensions = null,
         SpecFilter[]? filters = null,
         int? limit = null) =>
-        new(model, metrics ?? ["revenue"], dimensions ?? [], filters ?? [], limit);
+        new(model, metrics ?? ["orders_shipped"], dimensions ?? [], filters ?? [], limit);
 
     [Fact]
     public void Accepts_a_well_formed_spec()
     {
-        var result = _validator.Validate(Spec(Query(dimensions: ["region"])));
+        var result = _validator.Validate(Spec(Query(dimensions: ["carrier"])));
 
         Assert.True(result.IsValid);
-        Assert.Equal("sales", result.Spec!.Queries[0].Model);
+        Assert.Equal("shipping", result.Spec!.Queries[0].Model);
     }
 
     [Fact]
@@ -38,7 +38,7 @@ public class SpecValidatorTests
     [Fact]
     public void Rejects_an_unknown_metric()
     {
-        var result = _validator.Validate(Spec(Query(metrics: ["revenue", "profit_margin"])));
+        var result = _validator.Validate(Spec(Query(metrics: ["orders_shipped", "profit_margin"])));
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Problems, p => p.Kind == SpecProblemKind.UnknownMetric);
@@ -68,7 +68,7 @@ public class SpecValidatorTests
     {
         // ordered_at is a date; 'contains' is a text operator.
         var result = _validator.Validate(Spec(Query(
-            filters: [new SpecFilter("ordered_at", FilterOp.Contains, ["2025"])])));
+            filters: [new SpecFilter("shipped_at", FilterOp.Contains, ["2025"])])));
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Problems, p => p.Kind == SpecProblemKind.BadOperator);
@@ -78,7 +78,7 @@ public class SpecValidatorTests
     public void Rejects_a_value_that_does_not_parse_as_the_declared_type()
     {
         var result = _validator.Validate(Spec(Query(
-            filters: [new SpecFilter("ordered_at", FilterOp.Gte, ["last tuesday-ish"])])));
+            filters: [new SpecFilter("shipped_at", FilterOp.Gte, ["last tuesday-ish"])])));
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Problems, p => p.Kind == SpecProblemKind.BadValue);
@@ -88,7 +88,7 @@ public class SpecValidatorTests
     public void Rejects_between_with_the_wrong_number_of_values()
     {
         var result = _validator.Validate(Spec(Query(
-            filters: [new SpecFilter("ordered_at", FilterOp.Between, ["2025-01-01"])])));
+            filters: [new SpecFilter("shipped_at", FilterOp.Between, ["2025-01-01"])])));
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Problems, p => p.Kind == SpecProblemKind.BadValue);
@@ -130,7 +130,7 @@ public class SpecValidatorTests
     [Fact]
     public void Drops_duplicate_keys_without_failing()
     {
-        var result = _validator.Validate(Spec(Query(metrics: ["revenue", "revenue"])));
+        var result = _validator.Validate(Spec(Query(metrics: ["orders_shipped", "orders_shipped"])));
 
         Assert.True(result.IsValid);
         Assert.Single(result.Spec!.Queries[0].Metrics);
