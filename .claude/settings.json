@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed -i '' 's/public const int MaxQueries = 6;/public const int MaxQueries = 8;/' src/core/Specs/ReportSpec.cs)",
+      "Bash(dotnet build *)"
+    ]
+  }
+}

@@ -9,8 +9,13 @@ public sealed record SeriesPoint(string Label, decimal? Value);
 
 /// <param name="Chart">The form actually drawn, after the request was checked against the data.</param>
 /// <param name="ChartNote">Set only when the requested form was replaced, saying what and why.</param>
+/// <param name="IsAdditive">
+/// Whether the largest value is the biggest contributor to a total (a count or a sum) or merely
+/// the highest rate. Only the former is worth picking out — highlighting the best on-time rate
+/// in the same colour as the worst carrier reads as an alarm.
+/// </param>
 public sealed record ChartSeries(
-    string Key, string Label, string Unit, bool IsTemporal, bool IsPartToWhole,
+    string Key, string Label, string Unit, bool IsTemporal, bool IsPartToWhole, bool IsAdditive,
     ChartKind Chart, string? ChartNote,
     IReadOnlyList<SeriesPoint> Points);
 

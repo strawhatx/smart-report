@@ -119,3 +119,35 @@ public class MultiDimensionChartTests
                 points: 5, dimensions: 1).Kind);
     }
 }
+
+/// <summary>The two forms added so "any chart" means something.</summary>
+public class ColumnAndAreaTests
+{
+    [Fact]
+    public void Columns_are_always_honoured_because_they_claim_nothing_about_the_data()
+    {
+        // Vertical versus horizontal is a presentation preference, not an assertion.
+        Assert.Equal(ChartKind.Column,
+            ChartChoice.Resolve(ChartKind.Column, isTemporal: false, isPartToWhole: false, points: 5).Kind);
+        Assert.Equal(ChartKind.Column,
+            ChartChoice.Resolve(ChartKind.Column, isTemporal: true, isPartToWhole: false, points: 12).Kind);
+    }
+
+    [Fact]
+    public void An_area_over_time_is_honoured()
+    {
+        var choice = ChartChoice.Resolve(ChartKind.Area, isTemporal: true, isPartToWhole: false, points: 10);
+
+        Assert.Equal(ChartKind.Area, choice.Kind);
+        Assert.Null(choice.Note);
+    }
+
+    [Fact]
+    public void An_area_over_categories_becomes_bars_and_says_why()
+    {
+        var choice = ChartChoice.Resolve(ChartKind.Area, isTemporal: false, isPartToWhole: false, points: 5);
+
+        Assert.Equal(ChartKind.Bar, choice.Kind);
+        Assert.Contains("ordered", choice.Note!, StringComparison.OrdinalIgnoreCase);
+    }
+}

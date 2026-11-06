@@ -37,6 +37,12 @@ public sealed record MandatoryPredicate(string ExpressionFormat, object Value, s
 /// Why it is restricted, in the user's terms. Beats a generic denial — "Carrier contract rates are
 /// Northpoint's internal data" tells someone what kind of thing they hit.
 /// </param>
+/// <param name="IsAdditive">
+/// True when the measure sums across groups — a count or a total, where the largest group is
+/// genuinely the biggest contributor and worth highlighting. False for rates and averages, where
+/// the largest value is just the highest rate and highlighting it says nothing. Getting this
+/// wrong paints the <i>best</i> carrier in the same colour as the worst one.
+/// </param>
 /// <param name="Alternative">
 /// A <c>model.metric</c> key to offer instead. <see cref="Policy.PolicyEngine"/> only suggests it
 /// after checking the asker may actually use it — a suggestion that leads to a second refusal is
@@ -49,7 +55,8 @@ public sealed record MetricDefinition(
     string Unit = "number",
     IReadOnlyList<string>? RequiredRoles = null,
     string? RestrictionNote = null,
-    string? Alternative = null)
+    string? Alternative = null,
+    bool IsAdditive = true)
 {
     public bool IsAllowedFor(string role) => RequiredRoles is null || RequiredRoles.Contains(role);
 }

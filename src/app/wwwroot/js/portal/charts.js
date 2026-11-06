@@ -80,17 +80,23 @@ function bindTip(target, text) {
 /* ─────────────────────────── bar ─────────────────────────── */
 
 /**
- * Ranked horizontal bars with emphasis: the largest wears the accent, the rest a single hue.
+ * Ranked horizontal bars, in one hue.
  *
- * Emphasis rather than a hue per category — the story is "one carrier accounts for most of it",
- * and giving every bar its own colour would bury that under a legend.
+ * The largest bar takes the accent only when the measure is additive — a count or a total, where
+ * it really is the biggest contributor. On a rate it is just the highest rate, and colouring the
+ * best on-time carrier the same as the worst late one turns a good number into an alarm.
  */
 export function barChart(series) {
   const points = series.points.filter((p) => p.value !== null);
   if (!points.length) return null;
 
   const labelWidth = 150;
-  const valueWidth = 56;
+
+  // Reserved from the widest formatted value rather than a fixed guess: "$8,162.88" needs about
+  // twice the room "200" does, and a fixed reserve puts the label on top of the bar.
+  const widest = Math.max(...points.map((p) => formatValue(p.value, series.unit).length));
+  const valueWidth = Math.max(48, widest * 8 + 12);
+
   const row = 36;
   const width = 640;
   const height = points.length * row;
@@ -109,7 +115,7 @@ export function barChart(series) {
     const h = Math.min(BAR_MAX, row - 12);
     const barY = y + (row - h) / 2;
     const w = Math.max(3, (Math.abs(point.value) / max) * plot);
-    const isTop = Math.abs(point.value) === max;
+    const isTop = series.isAdditive !== false && Math.abs(point.value) === max;
 
     const label = el('text', {
       x: labelWidth - 14, y: barY + h / 2 + 4, 'text-anchor': 'end',
@@ -244,13 +250,88 @@ function arc(centre, radius, thickness, startDeg, endDeg) {
        + `L${x3},${y3} A${inner},${inner} 0 ${large} 0 ${x4},${y4} Z`;
 }
 
+/* ─────────────────────────── column ─────────────────────────── */
+
+/**
+ * Vertical bars. The same comparison as the horizontal form — one baseline, lengths compared —
+ * just read left to right, which suits short labels and a handful of categories.
+ */
+export function columnChart(series) {
+  const points = series.points.filter((p) => p.value !== null);
+  if (!points.length) return null;
+
+  const width = 720;
+  const height = 300;
+  const pad = { top: 18, right: 8, bottom: 42, left: 56 };
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+
+  const scale = niceScale(0, Math.max(...points.map((p) => Math.abs(p.value))), 4);
+  const band = plotW / points.length;
+  const barWidth = Math.min(BAR_MAX * 2, band * 0.6);
+
+  const svg = el('svg', {
+    viewBox: `0 0 ${width} ${height}`, role: 'img',
+    'aria-label': `${series.label} by category`, class: 'w-full',
+  });
+
+  for (let value = scale.min; value <= scale.max + 1e-9; value += scale.step) {
+    const gy = pad.top + plotH - ((value - scale.min) / (scale.max - scale.min || 1)) * plotH;
+    svg.appendChild(el('line', {
+      x1: pad.left, y1: gy, x2: pad.left + plotW, y2: gy, class: 'stroke-rule', 'stroke-width': 1,
+    }));
+    const tick = el('text', {
+      x: pad.left - 12, y: gy + 4, 'text-anchor': 'end',
+      class: 'fill-ink-faint text-[12px] tabular-nums',
+    });
+    tick.textContent = formatValue(value, series.unit);
+    svg.appendChild(tick);
+  }
+
+  const max = Math.max(...points.map((p) => Math.abs(p.value))) || 1;
+
+  points.forEach((point, i) => {
+    const h = Math.max(3, (Math.abs(point.value) / (scale.max || max)) * plotH);
+    const x = pad.left + i * band + (band - barWidth) / 2;
+    const y = pad.top + plotH - h;
+    const isTop = series.isAdditive !== false && Math.abs(point.value) === max;
+
+    svg.appendChild(el('path', {
+      d: roundedColumn(x, y, barWidth, h),
+      class: isTop ? 'fill-series-4' : 'fill-series-1',
+    }));
+
+    const label = el('text', {
+      x: x + barWidth / 2, y: height - 22, 'text-anchor': 'middle',
+      class: 'fill-ink-faint text-[12px]',
+    });
+    label.textContent = point.label.length > 12 ? `${point.label.slice(0, 11)}…` : point.label;
+    svg.appendChild(label);
+
+    const hit = el('rect', {
+      x: pad.left + i * band, y: pad.top, width: band, height: plotH, class: 'fill-transparent',
+    });
+    bindTip(hit, `${point.label} · ${formatValue(point.value, series.unit)}`);
+    svg.appendChild(hit);
+  });
+
+  return svg;
+}
+
+/** Square at the baseline, 4px rounded at the data end — the column equivalent of the bar. */
+function roundedColumn(x, y, width, height) {
+  const r = Math.min(4, width / 2, height / 2);
+  return `M${x},${y + r} A${r},${r} 0 0 1 ${x + r},${y} H${x + width - r} `
+       + `A${r},${r} 0 0 1 ${x + width},${y + r} V${y + height} H${x} Z`;
+}
+
 /* ─────────────────────────── line ─────────────────────────── */
 
 /**
  * One or two series over time. A second series is distinguished by a dashed stroke as well as
  * colour, so the comparison survives for a reader who cannot separate the two hues.
  */
-export function lineChart(lines, unit) {
+export function lineChart(lines, unit, { filled = false } = {}) {
   const usable = lines.filter((l) => l.points.length > 1);
   if (!usable.length) return null;
 
@@ -303,6 +384,13 @@ export function lineChart(lines, unit) {
       'stroke-linejoin': 'round',
       ...(line.dashed ? { 'stroke-dasharray': '6 5', class: 'stroke-ink-faint' } : { class: 'stroke-series-1' }),
     }));
+
+    // The wash goes under the current series only. Two filled areas would overlap into a colour
+    // neither of them is.
+    if (filled && !line.dashed) {
+      const area = `${d} L${x(line.points.length - 1)},${y(scale.min)} L${x(0)},${y(scale.min)} Z`;
+      svg.insertBefore(el('path', { d: area, class: 'fill-series-1 opacity-10' }), svg.firstChild);
+    }
 
     if (!line.dashed) {
       const last = line.points.length - 1;

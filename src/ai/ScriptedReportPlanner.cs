@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using SmartReport.Core.Abstractions;
 using SmartReport.Core.Policy;
+using SmartReport.Core.Reporting;
 using SmartReport.Core.Specs;
 
 namespace SmartReport.Ai;
@@ -162,12 +163,44 @@ public sealed class ScriptedReportPlanner : IReportPlanner
                 [October("shipped_at")], null)]),
     ];
 
+    /// <summary>
+    /// Phrasings that mean "same report, drawn differently". Order matters: the first match wins,
+    /// so "no chart" is checked before the words that name a shape.
+    /// </summary>
+    private static readonly (string[] Words, ChartKind Kind)[] ChartRequests =
+    [
+        (["no chart", "just the numbers", "as a table", "as a list", "table instead", "numbers instead"], ChartKind.Table),
+        (["line chart", "as a line", "line graph", "to a line"], ChartKind.Line),
+        (["bar chart", "as bars", "as a bar", "bar graph", "to bars"], ChartKind.Bar),
+        (["column chart", "as columns", "vertical bars"], ChartKind.Column),
+        (["area chart", "as an area", "filled"], ChartKind.Area),
+        (["pie", "donut", "doughnut", "ring"], ChartKind.Donut),
+    ];
+
     public async IAsyncEnumerable<PlannerEvent> PlanAsync(
-        string question,
+        PlanRequest request,
         Principal principal,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var normalized = question.ToLowerInvariant();
+        var normalized = request.Question.ToLowerInvariant();
+
+        // "Convert this to a table" means nothing on its own. With the previous plan in hand it
+        // means: the same report, drawn differently — so reuse it rather than starting over.
+        if (request.IsFollowUp && FindChartRequest(normalized) is { } requested)
+        {
+            var previous = PlannerJson.Parse(request.PreviousPlanJson!).Spec;
+            if (previous is not null)
+            {
+                yield return new PlannerEvent.Thinking("Same report, drawn differently.");
+                await Task.Delay(StepDelay, cancellationToken);
+
+                yield return new PlannerEvent.Planned(previous with
+                {
+                    Queries = previous.Queries.Select(q => q with { Chart = requested }).ToArray(),
+                });
+                yield break;
+            }
+        }
 
         yield return new PlannerEvent.Thinking(
             $"Reading the catalog as {principal.DisplayName}, {Roles.Label(principal.Role)} at {principal.ClientName}.");
@@ -193,6 +226,18 @@ public sealed class ScriptedReportPlanner : IReportPlanner
         }
 
         yield return new PlannerEvent.Planned(new ReportSpec(rule.Title, rule.Build()));
+    }
+
+    private static ChartKind? FindChartRequest(string question)
+    {
+        foreach (var (words, kind) in ChartRequests)
+        {
+            if (words.Any(question.Contains))
+            {
+                return kind;
+            }
+        }
+        return null;
     }
 
     private static bool Matches(Rule rule, string question) =>

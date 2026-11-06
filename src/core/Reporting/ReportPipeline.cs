@@ -63,10 +63,43 @@ public sealed class ReportPipeline(
         }
 
         var validated = validator.Validate(planned);
+
+        // One correction attempt. The catalog is not uniform — the same idea is called
+        // `shipped_at` on one model and `received_at` on another — and the schema cannot express
+        // "this key, but only on that model". Refusing a reasonable question over a naming
+        // detail is a worse answer than asking the planner to try again with the errors in hand.
+        if (!validated.IsValid && planner.CanRepair && !request.IsRetry)
+        {
+            yield return new ReportEvent.Thinking(
+                $"That plan didn't fit the catalog ({validated.Summary}) — asking it to correct.");
+
+            ReportSpec? corrected = null;
+            var retry = request with { ValidationProblems = validated.Summary };
+
+            await foreach (var step in Plan(retry, principal, cancellationToken))
+            {
+                switch (step)
+                {
+                    case PlannerEvent.Planned result:
+                        corrected = result.Spec;
+                        break;
+                    case PlannerEvent.NoMatch noMatch:
+                        yield return new ReportEvent.Refused(noMatch.Message);
+                        yield return new ReportEvent.Done();
+                        yield break;
+                }
+            }
+
+            if (corrected is not null)
+            {
+                validated = validator.Validate(corrected);
+            }
+        }
+
         if (!validated.IsValid)
         {
-            // A plan that fails validation is a bad answer, not an attack, and the user gets a
-            // straight explanation of what wasn't available.
+            // A plan that still fails validation is a bad answer, not an attack, and the user
+            // gets a straight explanation of what wasn't available.
             yield return new ReportEvent.Refused(validated.Summary);
             yield return new ReportEvent.Done();
             yield break;

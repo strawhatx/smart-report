@@ -46,7 +46,7 @@ public sealed record ReportSpec(string Title, IReadOnlyList<SpecQuery> Queries);
 /// <summary>Hard bounds applied to every spec, whichever planner produced it.</summary>
 public static class SpecLimits
 {
-    public const int MaxQueries = 6;
+    public const int MaxQueries = 8;
     public const int MaxMetricsPerQuery = 6;
     public const int MaxDimensionsPerQuery = 3;
     public const int MaxFiltersPerQuery = 8;

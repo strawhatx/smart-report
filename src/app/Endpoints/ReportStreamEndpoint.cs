@@ -4,10 +4,17 @@ using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using SmartReport.Core.Reporting;
 using SmartReport.App.Security;
+using SmartReport.Core.Abstractions;
 
 namespace SmartReport.App.Endpoints;
 
-public sealed record AskRequest(string Question);
+/// <param name="PreviousPlan">
+/// The plan behind the report on screen, so a message like "make that a table" has something to
+/// refer to. Untrusted — it only steers the planner, and whatever comes back is validated and
+/// authorized exactly as a first question would be (C4).
+/// </param>
+public sealed record AskRequest(
+    string Question, string? PreviousQuestion = null, string? PreviousPlan = null);
 
 public sealed record SaveRequest(string Title, string Question);
 
@@ -29,6 +36,10 @@ public sealed class AskRequestValidator : AbstractValidator<AskRequest>
         RuleFor(r => r.Question)
             .NotEmpty().WithMessage("Ask a question first.")
             .MaximumLength(500).WithMessage("That question is too long — try 500 characters or fewer.");
+
+        // Bounded because it comes from the browser and ends up in a billed request.
+        RuleFor(r => r.PreviousQuestion).MaximumLength(500);
+        RuleFor(r => r.PreviousPlan).MaximumLength(8000);
     }
 }
 
@@ -71,7 +82,9 @@ public static class ReportStreamEndpoint
                 context.Response.Headers["X-Accel-Buffering"] = "no";
                 context.Response.ContentType = "text/event-stream";
 
-                await foreach (var @event in pipeline.RunAsync(request.Question, principal, cancellationToken))
+                var plan = new PlanRequest(request.Question, request.PreviousQuestion, request.PreviousPlan);
+
+                await foreach (var @event in pipeline.RunAsync(plan, principal, cancellationToken))
                 {
                     // The pipeline lives in core and has no logger, so the record of a failure is
                     // written here, where the request context is already in hand (C5).

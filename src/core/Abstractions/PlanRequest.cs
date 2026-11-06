@@ -16,10 +16,23 @@ namespace SmartReport.Core.Abstractions;
 /// </para>
 /// </summary>
 /// <param name="PreviousPlanJson">The plan behind the report on screen, as the client received it.</param>
+/// <param name="ValidationProblems">
+/// Set only on a retry, to tell the planner what was wrong with its last attempt.
+///
+/// <para>
+/// The catalog is not uniform — a date range is <c>shipped_at</c> on one model and
+/// <c>received_at</c> on another — and the schema offers the union of every filter name, so
+/// using one on the wrong model is allowed by the schema and caught by the validator. Handing
+/// those errors back is cheaper than refusing a reasonable question over a naming detail.
+/// </para>
+/// </summary>
 public sealed record PlanRequest(
     string Question,
     string? PreviousQuestion = null,
-    string? PreviousPlanJson = null)
+    string? PreviousPlanJson = null,
+    string? ValidationProblems = null)
 {
     public bool IsFollowUp => !string.IsNullOrWhiteSpace(PreviousPlanJson);
+
+    public bool IsRetry => !string.IsNullOrWhiteSpace(ValidationProblems);
 }

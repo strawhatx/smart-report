@@ -145,16 +145,65 @@ enforcement varies by provider.
 saying so, never a canned answer wearing a model's name — and the rail names the planner under
 every report.
 
+### A short question gets a full report
+
+Asking *"how are we doing on shipping"* doesn't return one chart. It returns headline figures with
+month-on-month deltas, then the breakdowns a reader would want next — by carrier, by channel, over
+time — and a query from a related model where that adds context. Four to seven queries, tiled as
+cards rather than stacked.
+
+Narrowing is your move, not the default: *"just the carriers"* gets you one chart.
+
+Two rules keep that from turning into noise:
+
+- **A comparison is dropped unless the headline covers a comparable period.** A planner building a
+  full report will happily scope the comparison to September and leave the headline unscoped —
+  which compares one month against two years and prints *"+1,363% vs September"* in large type.
+  Losing a delta beats printing a falsehood. `ComparisonCoherenceTests`.
+- **The accent colour marks the biggest contributor, not the largest number.** It appears on
+  counts and totals, never on rates or averages — otherwise the *best* on-time carrier gets the
+  same orange as the worst late one, and a good number reads as an alarm. Catalog metrics carry
+  `IsAdditive` for this.
+
+### It's a conversation, not a search box
+
+Nobody restates the whole report to change it. They say *"actually make that a column chart"*,
+*"and by sales channel instead"*, *"add the on-time rate too"* — so the plan behind the report on
+screen is sent back with the next message, and the model returns a modified plan rather than
+starting over.
+
+```
+you  → show late shipments by carrier
+       shipping · late_shipments by carrier · bar
+
+you  → actually make that a column chart
+       shipping · late_shipments by carrier · column     ← same report, redrawn
+
+you  → and by sales channel instead
+       shipping · late_shipments by channel              ← grouping swapped, measure kept
+
+you  → add the on-time rate too
+       shipping · late_shipments, on_time_rate by carrier
+
+you  → which products are low on stock?
+       inventory · low_stock_products by product         ← recognised as a new question
+```
+
+**That context is untrusted and it doesn't matter.** It arrives from the browser and could say
+anything; whatever the planner returns from it is validated against the catalog and authorized
+for the principal exactly as a first question is. It steers the planner — it cannot widen what
+comes back. `FollowUpTests` covers that, including a tampered plan naming a restricted model.
+
 ### Asking for a particular chart
 
-You can say how you want it drawn — *"show orders by month as a line chart"*, *"just give me the
-numbers"* — and the model sets a `chart` field alongside the measures. But a requested shape is
-only honoured where the data supports it:
+Six forms: `bar` (horizontal), `column` (vertical), `line`, `area`, `donut`, `table`. A requested
+shape is only honoured where the data supports it:
 
 | You ask for | Over months | Over carriers |
 |---|---|---|
-| a line | a line | **bars**, with: *"Asked for a line, shown as bars: these groups have no order, so a line would suggest a trend between them that does not exist."* |
-| a ring | a ring, up to six slices | bars past six: *"…too many to compare by angle."* |
+| a line or area | drawn as asked | **bars**: *"these groups have no order, so a line would suggest a trend between them that does not exist."* |
+| a ring | — | a ring up to six slices; bars past six: *"…too many to compare by angle."* |
+| columns | drawn as asked | drawn as asked — vertical vs horizontal claims nothing about the data |
 | no chart | the figures | the figures |
 
 A line across categories claims the gaps between them mean something. Rather than draw that, the
@@ -163,7 +212,7 @@ would be worse than either.
 
 Grouping by two things at once (carrier *and* month) becomes a table for the same reason: one
 chart would have to flatten one grouping into the other, and the result reads as every carrier
-repeated per period. The rule lives in `ChartChoice` and is covered by `ChartChoiceTests`.
+repeated per period. The rules live in `ChartChoice` and are covered by `ChartChoiceTests`.
 
 ### What the model actually sees
 

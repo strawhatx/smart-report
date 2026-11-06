@@ -51,6 +51,18 @@ public sealed class DataCatalog
     }
 
     /// <summary>
+    /// Every model with a time axis also accepts this, mapped to that model's own date column.
+    ///
+    /// <para>
+    /// Without it the planner has to remember that a date range is <c>shipped_at</c> here,
+    /// <c>received_at</c> there and <c>period_month</c> somewhere else — and because the schema
+    /// offers the union of filter names, picking the wrong one is both easy and allowed. One
+    /// name that works everywhere removes the mistake rather than catching it.
+    /// </para>
+    /// </summary>
+    public const string PeriodFilter = "period";
+
+    /// <summary>
     /// What the planner is shown: keys, labels and types only.
     ///
     /// <para>
@@ -71,6 +83,11 @@ public sealed class DataCatalog
               .AppendLine(string.Join(", ", model.Dimensions.Values.Select(d => d.Key)));
             sb.Append("  filters: ")
               .AppendLine(string.Join(", ", model.Filters.Values.Select(f => $"{f.Key}:{f.Type.ToString().ToLowerInvariant()}")));
+
+            if (model.Filter(PeriodFilter) is not null)
+            {
+                sb.AppendLine("  (for a date range on this model, prefer 'period')");
+            }
         }
         return sb.ToString();
     }
@@ -91,23 +108,26 @@ public sealed class DataCatalog
                 new MetricDefinition("orders_shipped", "Orders shipped", "COUNT(DISTINCT s.order_id)"),
                 new MetricDefinition("on_time_rate", "Shipped on time",
                     "100.0 * (1 - SUM(CASE WHEN s.is_late THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0))",
-                    "percent"),
+                    "percent", IsAdditive: false),
                 new MetricDefinition("late_shipments", "Late shipments",
                     "SUM(CASE WHEN s.is_late THEN 1 ELSE 0 END)"),
                 new MetricDefinition("avg_days_to_ship", "Avg time to ship",
-                    "AVG(EXTRACT(EPOCH FROM (s.shipped_at - o.ordered_at)) / 86400.0)", "days"),
+                    "AVG(EXTRACT(EPOCH FROM (s.shipped_at - o.ordered_at)) / 86400.0)", "days", IsAdditive: false),
                 // The authorized answer to "what does Northpoint pay UPS" — this is the client's
                 // own billed figure, which is theirs to see.
                 new MetricDefinition("billed_cost_per_shipment", "Billed cost per shipment",
-                    "AVG(s.billed_amount)", "currency")),
+                    "AVG(s.billed_amount)", "currency", IsAdditive: false)),
             Dimensions: Index(
                 new DimensionDefinition("carrier", "Carrier", "s.carrier"),
                 new DimensionDefinition("service", "Service", "s.service"),
+                new DimensionDefinition("on_time", "On time", 
+                    "CASE WHEN s.is_late THEN 'Late' ELSE 'On time' END", IsPartToWhole: true),
                 new DimensionDefinition("channel", "Sales channel", "o.channel", IsPartToWhole: true),
                 new DimensionDefinition("month", "Month", "to_char(s.shipped_at, 'YYYY-MM')", IsTemporal: true),
                 new DimensionDefinition("week", "Week", "to_char(s.shipped_at, 'IYYY-\"W\"IW')", IsTemporal: true)),
             Filters: Index(
                 new FilterFieldDefinition("shipped_at", "Ship date", "s.shipped_at", FieldType.Date),
+                new FilterFieldDefinition("period", "Period", "s.shipped_at", FieldType.Date),
                 new FilterFieldDefinition("carrier", "Carrier", "s.carrier", FieldType.Text),
                 new FilterFieldDefinition("channel", "Sales channel", "o.channel", FieldType.Text),
                 new FilterFieldDefinition("is_late", "Late only", "s.is_late::text", FieldType.Text)),
@@ -129,6 +149,7 @@ public sealed class DataCatalog
                 new DimensionDefinition("month", "Month", "to_char(o.ordered_at, 'YYYY-MM')", IsTemporal: true)),
             Filters: Index(
                 new FilterFieldDefinition("ordered_at", "Order date", "o.ordered_at", FieldType.Date),
+                new FilterFieldDefinition("period", "Period", "o.ordered_at", FieldType.Date),
                 new FilterFieldDefinition("channel", "Sales channel", "o.channel", FieldType.Text),
                 new FilterFieldDefinition("status", "Status", "o.status", FieldType.Text)),
             Tables: ["orders"]),
@@ -146,7 +167,10 @@ public sealed class DataCatalog
                     "SUM(CASE WHEN p.on_hand <= p.reorder_point THEN 1 ELSE 0 END)")),
             Dimensions: Index(
                 new DimensionDefinition("product", "Product", "p.name"),
-                new DimensionDefinition("sku", "SKU", "p.sku")),
+                new DimensionDefinition("sku", "SKU", "p.sku"),
+                new DimensionDefinition("stock_status", "Stock status",
+                    "CASE WHEN p.on_hand <= p.reorder_point THEN 'Low' ELSE 'OK' END",
+                    IsPartToWhole: true)),
             Filters: Index(
                 new FilterFieldDefinition("sku", "SKU", "p.sku", FieldType.Text),
                 new FilterFieldDefinition("product", "Product", "p.name", FieldType.Text)),
@@ -157,17 +181,24 @@ public sealed class DataCatalog
             Key: "returns",
             Label: "Returns",
             Description: "Returned orders, their stated reasons and refund value.",
-            From: "returns r",
+            From: """
+                  returns r
+                  JOIN orders o ON o.id = r.order_id AND o.client_id = r.client_id
+                  """,
             Metrics: Index(
                 new MetricDefinition("return_count", "Returns", "COUNT(*)"),
-                new MetricDefinition("refund_value", "Refund value", "SUM(r.refund_amount)", "currency")),
+                new MetricDefinition("refund_value", "Refund value", "SUM(r.refund_amount)", "currency"),
+                new MetricDefinition("avg_refund", "Average refund", "AVG(r.refund_amount)", "currency", IsAdditive: false)),
             Dimensions: Index(
                 new DimensionDefinition("reason", "Reason", "r.reason"),
+                new DimensionDefinition("channel", "Sales channel", "o.channel", IsPartToWhole: true),
                 new DimensionDefinition("month", "Month", "to_char(r.received_at, 'YYYY-MM')", IsTemporal: true)),
             Filters: Index(
                 new FilterFieldDefinition("received_at", "Received", "r.received_at", FieldType.Date),
-                new FilterFieldDefinition("reason", "Reason", "r.reason", FieldType.Text)),
-            Tables: ["returns"]),
+                new FilterFieldDefinition("period", "Period", "r.received_at", FieldType.Date),
+                new FilterFieldDefinition("reason", "Reason", "r.reason", FieldType.Text),
+                new FilterFieldDefinition("channel", "Sales channel", "o.channel", FieldType.Text)),
+            Tables: ["returns", "orders"]),
 
         // ── Billing: the client's own invoice, restricted to whoever owns the account.
         new QueryModel(
@@ -183,12 +214,13 @@ public sealed class DataCatalog
                     RestrictionNote: "Billing is restricted to the account owner."),
                 new MetricDefinition("avg_monthly_fees", "Average monthly fees", "AVG(f.amount)", "currency",
                     RequiredRoles: [Entities_AccountOwner],
-                    RestrictionNote: "Billing is restricted to the account owner.")),
+                    RestrictionNote: "Billing is restricted to the account owner.", IsAdditive: false)),
             Dimensions: Index(
                 new DimensionDefinition("fee_type", "Fee type", "f.fee_type"),
                 new DimensionDefinition("month", "Month", "to_char(f.period_month, 'YYYY-MM')", IsTemporal: true)),
             Filters: Index(
                 new FilterFieldDefinition("period_month", "Period", "f.period_month", FieldType.Date),
+                new FilterFieldDefinition("period", "Period", "f.period_month", FieldType.Date),
                 new FilterFieldDefinition("fee_type", "Fee type", "f.fee_type", FieldType.Text)),
             Tables: ["fees"],
             RequiredRoles: [Entities_AccountOwner],
@@ -201,17 +233,18 @@ public sealed class DataCatalog
             Description: "Anonymized medians across Northpoint clients. Cohort totals only — no client is identifiable.",
             From: "benchmark_metrics bm",
             Metrics: Index(
-                new MetricDefinition("peer_median", "Peer median", "AVG(bm.p50)", "percent"),
-                new MetricDefinition("peer_p25", "Peer 25th percentile", "AVG(bm.p25)", "percent"),
-                new MetricDefinition("peer_p75", "Peer 75th percentile", "AVG(bm.p75)", "percent"),
-                new MetricDefinition("cohort_size", "Clients in cohort", "MIN(bm.client_count)")),
+                new MetricDefinition("peer_median", "Peer median", "AVG(bm.p50)", "percent", IsAdditive: false),
+                new MetricDefinition("peer_p25", "Peer 25th percentile", "AVG(bm.p25)", "percent", IsAdditive: false),
+                new MetricDefinition("peer_p75", "Peer 75th percentile", "AVG(bm.p75)", "percent", IsAdditive: false),
+                new MetricDefinition("cohort_size", "Clients in cohort", "MIN(bm.client_count)", IsAdditive: false)),
             Dimensions: Index(
                 new DimensionDefinition("metric", "Metric", "bm.metric_key"),
                 new DimensionDefinition("segment", "Segment", "bm.dimension_value"),
                 new DimensionDefinition("month", "Month", "to_char(bm.period_month, 'YYYY-MM')", IsTemporal: true)),
             Filters: Index(
                 new FilterFieldDefinition("metric", "Metric", "bm.metric_key", FieldType.Text),
-                new FilterFieldDefinition("period_month", "Period", "bm.period_month", FieldType.Date)),
+                new FilterFieldDefinition("period_month", "Period", "bm.period_month", FieldType.Date),
+                new FilterFieldDefinition("period", "Period", "bm.period_month", FieldType.Date)),
             Tables: ["benchmark_metrics"],
             MandatoryPredicates:
             [
@@ -232,7 +265,7 @@ public sealed class DataCatalog
                 new MetricDefinition("avg_cost_per_label", "Cost per label", "AVG(ccr.cost_per_label)", "currency",
                     RequiredRoles: [NorthpointStaffRole],
                     RestrictionNote: "Carrier contract rates are Northpoint's internal data.",
-                    Alternative: "shipping.billed_cost_per_shipment")),
+                    Alternative: "shipping.billed_cost_per_shipment", IsAdditive: false)),
             Dimensions: Index(
                 new DimensionDefinition("carrier", "Carrier", "ccr.carrier"),
                 new DimensionDefinition("service", "Service", "ccr.service")),

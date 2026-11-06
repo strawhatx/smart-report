@@ -1,15 +1,16 @@
 # Smart Report
 
-A demo: users ask for a report in plain language, a **local** model plans it, and the answer is
-bounded by permissions that already exist in the database.
+A demo: clients of a fictional 3PL (Northpoint Fulfillment) ask for a report in plain language, a
+model plans it, and the answer is bounded by permissions that already exist in the database.
 
-**Stack:** ASP.NET Core 10 (Razor Pages) · EF Core 10 + PostgreSQL 17 · vanilla ESM front end
-(GSAP, Lenis, Three.js — self-hosted) · pluggable local LLM (scripted by default, Ollama opt-in).
+**Stack:** ASP.NET Core 10 (Razor Pages) · EF Core 10 + PostgreSQL 17 · Tailwind v4 via the
+standalone CLI (no npm) · hand-rolled inline-SVG charts · any model through
+`Microsoft.Extensions.AI` (scripted by default, `groq`/`anthropic`/`openai`/`ollama` by config).
 
 ```
 src/app/     Razor Pages, the SSE endpoint, security middleware — presentation only
 src/core/    catalog, specs, policy, SQL compiler, ReportPipeline — NO I/O, BCL only
-src/ai/      IReportPlanner implementations: scripted, and a local model over HTTP
+src/ai/      IReportPlanner + IReportNarrator: scripted, and any provider via IChatClient
 src/data/    EF Core + Npgsql: entities, migrations, RLS policies, seed
 tests/       xUnit — the governance suite
 ```
@@ -130,10 +131,11 @@ endpoint is still trivially abusable.
 Content Security Policy with no `unsafe-inline`.
 **Why:** These stop common browser attacks, like other sites loading yours in a hidden frame to
 trick users into clicking.
-**Dev note:** **This is why GSAP, Lenis and Three.js are vendored into `wwwroot/lib/` instead of
-loaded from a CDN.** A CSP worth having doesn't allow arbitrary third-party script origins. Inline
-scripts and styles need a per-request nonce. Versions and source URLs are recorded in
-`docs/vendor.md`.
+**Dev note:** **This is why Tailwind is built by a standalone binary into `wwwroot/css/app.css`
+rather than loaded from a CDN.** A CSP worth having doesn't allow arbitrary third-party script or
+style origins. Inline scripts and styles need a per-request nonce. Class names must appear
+literally in source — Tailwind generates by scanning text, so `fill-series-${i}` produces a class
+that does not exist.
 
 ### C9. Be careful with packages
 **Rule:** Only install well-known, actively maintained packages. Confirm a package exists on
@@ -172,16 +174,17 @@ _**Translated:** the pack's A-rules are written for Supabase Auth. This project 
 cookie authentication, so each rule below keeps its intent and drops the Supabase mechanics._
 
 ### A1. One way to build the principal
-**Rule:** Authentication state comes from the auth cookie. Authorization state — role and region —
-is loaded from the database per request by `PrincipalScope`. Never hand-roll a second path.
+**Rule:** Authentication state comes from the auth cookie. Authorization state — the client
+account and the role — is loaded from the database per request by `PrincipalContext` /
+`PrincipalDirectory`. Never hand-roll a second path.
 **Why:** The right setup keeps the session in secure cookies and the permissions in one place.
 **Dev note:** Cookie auth with `HttpOnly`, `Secure`, `SameSite=Lax`, signed and encrypted by ASP.NET
 Core Data Protection.
 
 ### A2. Verify the user on the server
 **Rule:** When server code decides whether someone may see or change data, resolve the principal
-server-side through `PrincipalScope`. Never make an access decision from an unvalidated cookie value
-or a claim the client could influence.
+server-side through `PrincipalContext`. Never make an access decision from an unvalidated cookie
+value, a claim the client could influence, or anything the model returned.
 **Why:** Cookies can be faked. The decision must be made against something the server trusts.
 **Translated:** Supabase's `getUser()`-not-`getSession()` distinction maps to: the cookie proves
 *identity*; the database supplies *authority*.
@@ -193,16 +196,18 @@ is the real one. Both.
 **Dev note:** Pages redirect to sign-in; API endpoints return 401 JSON.
 
 ### A4. Take the user ID from the session only
-**Rule:** Never accept a user ID, employee ID, role, or region from the request body, route, or
-query to decide whose data to read. Take it from `PrincipalScope`.
+**Rule:** Never accept a user ID, client ID, or role from the request body, route, or query to
+decide whose data to read. Take it from `PrincipalContext`. This includes the conversational
+context a follow-up sends: it steers the planner and is re-validated and re-authorized like any
+other plan.
 **Why:** If the app trusts an ID from the browser, anyone can swap in someone else's ID and see
 their data.
-**Dev note:** This is IDOR (OWASP A01). It is also exactly what `app.region_id` would leak if it
-were ever set from a request value.
+**Dev note:** This is IDOR (OWASP A01). It is also exactly what `app.client_id` would leak if it
+were ever set from a request value rather than from the resolved principal.
 
 ### A5. Never let the user supply their own role
-**Rule:** Roles live in the `employees` table and are loaded server-side on every request. The
-cookie carries identity only. Never store a role, plan, or permission in a place the user can edit,
+**Rule:** Roles live in the `client_users` table and are loaded server-side on every request. The
+cookie carries a principal key only. Never store a role, plan, or permission in a place the user can edit,
 and never trust a role claim baked into a cookie at sign-in time.
 **Why:** Users can edit anything they hold, so they could make themselves an admin.
 **Translated:** Supabase's `user_metadata` vs `app_metadata` split maps to: identity in the cookie,
@@ -233,7 +238,7 @@ minimum 8-character passwords, confirmation, lockout on repeated failure.
 **Rule:** Every authenticated route and the SSE stream send `Cache-Control: no-store`. Never add
 output caching or response caching to anything that reads the principal.
 **Why:** A caching mistake can show one person's account page to someone else.
-**Dev note:** Only `/` is cacheable. Report pages, the gallery and `/api/reports/ask` are not.
+**Dev note:** Only `/` is cacheable. `/portal/*` and `/api/reports/*` are not.
 
 ### A11. Log out properly
 **Rule:** `SignOutAsync` then redirect. After logout, private pages must not be reachable, including
@@ -257,6 +262,13 @@ _**Translated:** the pack's D-rules are written for Supabase Postgres. The mecha
 security — is identical; only the client and the dashboard differ. `auth.uid()` becomes
 `current_setting('app.*')`, set per request inside a transaction._
 
+### D12. The model may choose a shape, not assert a fact
+**Rule:** A requested chart form is honoured only where the data supports it. A line across
+unordered categories, or a ring with too many slices, is replaced — and the substitution is shown
+on the panel, never silent.
+**Why:** A chart is a claim. A line between carriers claims the gap between them means something.
+**Dev note:** The rule lives in `ChartChoice` in `core` and is covered by `ChartChoiceTests`.
+
 ### D1. Turn on RLS for every table, in the same migration
 **Rule:** Every table gets `ENABLE ROW LEVEL SECURITY` **and** `FORCE ROW LEVEL SECURITY`, with its
 policies, in the same migration that creates it. Never disable RLS.
@@ -276,7 +288,7 @@ USING (current_setting('app.role', true) IS NOT NULL AND ( … ))
 
 ### D3. Only make data public on purpose
 **Rule:** Never write `USING (true)` for private data. Reference data that is genuinely shared
-(regions, products) may be readable, scoped to `select` only, with a comment saying why.
+(`report_templates`) may be readable, scoped to `select` only, with a comment saying why.
 **Why:** "true" means everyone.
 
 ### D4. Keep owner access out of normal queries
@@ -346,8 +358,8 @@ Check your work against this list, fix anything that fails, then tell the user i
 sentences what changed, what you checked, and anything they need to decide.
 
 - [ ] No secrets in committed config, in client JS, or hardcoded anywhere.
-- [ ] Every handler touching private data calls `RequireUser()`; role and region come from
-      `PrincipalScope`, never from the request.
+- [ ] Every handler touching private data resolves the principal through `PrincipalContext`;
+      client and role never come from the request.
 - [ ] All input validated server-side; DTOs, not entities, bound from requests.
 - [ ] Every new table has RLS **enabled and forced** with per-action policies in the same
       migration, and every policy denies on unset `app.*`.

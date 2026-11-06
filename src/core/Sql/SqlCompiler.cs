@@ -43,7 +43,8 @@ public sealed class SqlCompiler(DataCatalog catalog)
         {
             var metric = model.Metric(key)!;
             selectParts.Add($"  {metric.Expression} AS {Quote(metric.Key)}");
-            columns.Add(new ResultColumn(metric.Key, metric.Label, IsMetric: true, metric.Unit, IsTemporal: false));
+            columns.Add(new ResultColumn(metric.Key, metric.Label, IsMetric: true, metric.Unit,
+                IsTemporal: false, IsPartToWhole: false, IsAdditive: metric.IsAdditive));
         }
 
         sql.AppendLine(string.Join(",\n", selectParts));

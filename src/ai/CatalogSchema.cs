@@ -68,10 +68,11 @@ public static class CatalogSchema
                 ["chart"] = new JsonObject
                 {
                     ["type"] = "string",
-                    ["enum"] = Array("auto", "bar", "line", "donut", "table"),
+                    ["enum"] = Array("auto", "bar", "column", "line", "area", "donut", "table"),
                     ["description"] =
-                        "How to draw it. Use auto unless the reader asked for something "
-                        + "specific. line needs a time grouping; donut needs six parts or fewer.",
+                        "How to draw it. auto unless the reader asked for something specific. "
+                        + "bar = horizontal, column = vertical, line/area need a time grouping, "
+                        + "donut needs six parts or fewer, table = figures only.",
                 },
             },
             ["required"] = Array("model", "metrics", "dimensions", "filters", "label", "chart"),

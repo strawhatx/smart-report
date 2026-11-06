@@ -33,6 +33,16 @@ public interface IReportPlanner
     /// <summary>Shown in the UI so it is always clear which engine answered.</summary>
     string ProviderName { get; }
 
+    /// <summary>
+    /// True when a second attempt with the validation errors is worth making.
+    ///
+    /// <para>
+    /// False for planners whose output is fixed — retrying a lookup table returns the same plan
+    /// and wastes a round trip.
+    /// </para>
+    /// </summary>
+    bool CanRepair => false;
+
     IAsyncEnumerable<PlannerEvent> PlanAsync(
         PlanRequest request, Principal principal, CancellationToken cancellationToken);
 }

@@ -7,7 +7,8 @@ public sealed record QueryParameter(string Name, object Value);
 
 /// <summary>One column of the result set, described for rendering.</summary>
 public sealed record ResultColumn(
-    string Key, string Label, bool IsMetric, string Unit, bool IsTemporal, bool IsPartToWhole = false);
+    string Key, string Label, bool IsMetric, string Unit, bool IsTemporal,
+    bool IsPartToWhole = false, bool IsAdditive = true);
 
 /// <summary>
 /// Ready-to-execute SQL plus its parameters.

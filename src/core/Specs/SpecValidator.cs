@@ -56,9 +56,48 @@ public sealed class SpecValidator(DataCatalog catalog)
             }
         }
 
-        return problems.Count > 0
-            ? SpecValidationResult.Invalid(problems)
-            : SpecValidationResult.Valid(new ReportSpec(title, normalizedQueries));
+        if (problems.Count > 0)
+        {
+            return SpecValidationResult.Invalid(problems);
+        }
+
+        return SpecValidationResult.Valid(
+            new ReportSpec(title, DropIncoherentComparisons(normalizedQueries)));
+    }
+
+    /// <summary>
+    /// Removes a "previous period" query that has nothing comparable to sit against.
+    ///
+    /// <para>
+    /// A comparison only means something when the headline covers a matching period. Asked
+    /// "how are we doing on shipping", a planner may scope the comparison to September and leave
+    /// the headline unscoped — which compares one month against two years and reports a 1,363%
+    /// improvement. Dropping the comparison loses a delta; keeping it prints a falsehood in
+    /// large type.
+    /// </para>
+    /// <para>
+    /// A repair rather than a rejection: the report is still a good answer without it.
+    /// </para>
+    /// </summary>
+    private static List<SpecQuery> DropIncoherentComparisons(List<SpecQuery> queries)
+    {
+        var comparisons = queries
+            .Where(q => q.Label?.StartsWith("comparison", StringComparison.OrdinalIgnoreCase) == true)
+            .ToArray();
+
+        if (comparisons.Length == 0)
+        {
+            return queries;
+        }
+
+        var headlineIsPeriodScoped = queries.Any(q =>
+            q.Label?.Equals("headline", StringComparison.OrdinalIgnoreCase) == true
+            && q.Dimensions.Count == 0
+            && q.Filters.Count > 0);
+
+        return headlineIsPeriodScoped
+            ? queries
+            : queries.Except(comparisons).ToList();
     }
 
     private SpecQuery? ValidateQuery(SpecQuery query, string path, List<SpecProblem> problems)

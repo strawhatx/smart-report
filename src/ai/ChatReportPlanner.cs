@@ -32,6 +32,9 @@ public sealed class ChatReportPlanner(
 {
     private readonly AiOptions _options = options.Value;
 
+    /// <summary>A model can act on the validation errors; a lookup table cannot.</summary>
+    public bool CanRepair => true;
+
     public string ProviderName => _options.Provider.ToLowerInvariant() switch
     {
         "ollama" or "openai-compatible" => $"{_options.Model} (local)",
@@ -39,16 +42,19 @@ public sealed class ChatReportPlanner(
     };
 
     public async IAsyncEnumerable<PlannerEvent> PlanAsync(
-        string question,
+        PlanRequest request,
         Principal principal,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        yield return new PlannerEvent.Thinking($"Asking {ProviderName} to pick measures from the catalog.");
+        yield return new PlannerEvent.Thinking(
+            request.IsRetry ? $"Asking {ProviderName} again, with the catalog errors."
+            : request.IsFollowUp ? $"Asking {ProviderName} to change the report you're looking at."
+            : $"Asking {ProviderName} to pick measures from the catalog.");
 
         var messages = new List<ChatMessage>
         {
             new(ChatRole.System, SystemPrompt),
-            new(ChatRole.User, BuildPrompt(question, principal)),
+            new(ChatRole.User, BuildPrompt(request, principal)),
         };
 
         string content;
@@ -135,21 +141,48 @@ public sealed class ChatReportPlanner(
         dimension and filter keys in the catalog you are given. If the question needs something
         that is not there, set no_match to true and say what is missing.
 
-        Shape a report the way a good analyst would:
-        - Lead with a "headline" query: the key measures with NO dimensions, so the report opens
-          with figures rather than a chart. Label it "headline".
-        - When the question names a period, add a second query with the same measures over the
-          period before it, labelled "comparison:<PeriodName>" (for example
-          "comparison:September"). It is shown as a change against the headline, not as a chart.
-        - Then add one query per breakdown the question asks for, each labelled "".
-        - Skip the headline and comparison only when the question is narrowly about one
-          breakdown and nothing else.
+        Build a COMPLETE report, not the single chart that was literally asked for.
+
+        Someone asking "returns by reason this quarter" wants to understand returns. The reason
+        split is where they want to start, not the whole of what they want. Give them the picture
+        and let them narrow it afterwards — they can always say "just the reasons".
+
+        Every report, unless told otherwise:
+        1. A "headline" query: two to four key measures with NO dimensions, so it opens with
+           figures rather than a chart. Label it "headline".
+        2. A "comparison:<PeriodName>" query — the same measures over the period before, labelled
+           for example "comparison:September". It becomes the change shown against the headline,
+           not a chart of its own.
+           CRITICAL: only include a comparison if the headline query is itself filtered to a
+           period, and the two periods are the same length. Comparing one month against all of
+           history produces a meaningless percentage. If the reader named no period, either scope
+           the headline to the most recent month and compare with the one before, or leave the
+           comparison out entirely.
+        3. The breakdown they asked for, first.
+        4. Two or three more breakdowns from the same model that a reader would want next — the
+           trend over time, and the other dimensions that model offers. Prefer a time trend and a
+           part-to-whole split.
+        5. Where another model adds obvious context, one query from it. Returns are easier to
+           judge beside order volume; shipping performance beside the peer benchmark.
+
+        Aim for four to seven queries. Go narrow only when the message says so — "just",
+        "only", "nothing else" — or when it is a follow-up changing a report that already exists.
+
+        Follow-ups:
+        - You may be shown the plan behind the report the reader is already looking at. If their
+          message changes it rather than starting over — "make that a bar chart", "and by
+          channel", "now just Shopify", "drop the comparison" — return the previous plan with
+          that change applied and everything else untouched.
+        - Change only what they asked to change. Keep the same models, measures, groupings,
+          filters and labels otherwise.
+        - If the message is plainly a new question, ignore the previous plan.
 
         Charts:
         - Leave "chart" as "auto" unless the reader asked for a particular shape. Auto picks a
           line for time, a ring for a small part-to-whole split, and bars otherwise.
-        - "line" only when the grouping is time. A line across categories implies an order that
-          is not there, and the server will replace it with bars and say so.
+        - "bar" is horizontal, "column" is vertical. Either is fine for categories.
+        - "line" and "area" only when the grouping is time. Across categories they imply an order
+          that is not there, and the server will replace them with bars and say so.
         - "donut" only for six parts or fewer that add up to a whole.
         - "table" when the reader wants the figures rather than a picture.
 
@@ -163,14 +196,43 @@ public sealed class ChatReportPlanner(
         - Always set every field. Use no_match false and message "" for a normal plan.
         """;
 
-    private string BuildPrompt(string question, Principal principal) =>
-        $"""
-         Catalog:
-         {catalog.DescribeForPlanner()}
-         Today is {DateOnly.FromDateTime(DateTime.UtcNow):yyyy-MM-dd}. The data ends 2026-10-31.
+    private string BuildPrompt(PlanRequest request, Principal principal)
+    {
+        var prompt = new System.Text.StringBuilder();
+        prompt.AppendLine("Catalog:").AppendLine(catalog.DescribeForPlanner());
+        prompt.Append("Today is ").Append($"{DateOnly.FromDateTime(DateTime.UtcNow):yyyy-MM-dd}")
+              .AppendLine(". The data ends 2026-10-31.");
+        prompt.Append("The question comes from ").Append(principal.JobTitle)
+              .Append(" at ").Append(principal.ClientName).AppendLine(".");
 
-         The question comes from {principal.JobTitle} at {principal.ClientName}.
+        if (request.IsFollowUp)
+        {
+            prompt.AppendLine()
+                  .AppendLine("The reader is currently looking at this report.")
+                  .Append("Their previous message was: ").AppendLine(request.PreviousQuestion ?? "(unknown)")
+                  .AppendLine("The plan behind it was:")
+                  .AppendLine(Truncate(request.PreviousPlanJson!, 4000));
+        }
 
-         Question: {question}
-         """;
+        if (request.IsRetry)
+        {
+            prompt.AppendLine()
+                  .AppendLine("Your previous attempt was rejected:")
+                  .AppendLine(Truncate(request.ValidationProblems!, 1000))
+                  .AppendLine("Fix exactly that and keep the rest. A filter only exists on the "
+                              + "model it is listed under — 'period' works on every model that "
+                              + "has a date.");
+        }
+
+        prompt.AppendLine().Append("Message: ").Append(request.Question);
+        return prompt.ToString();
+    }
+
+    /// <summary>
+    /// Caps the context. A plan is small, but it arrives from the browser and nothing should be
+    /// able to push an unbounded string into a billed request.
+    /// </summary>
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..max];
+
 }

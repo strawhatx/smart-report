@@ -8,7 +8,7 @@
  * fetch() and the SSE framing is parsed here.
  */
 
-import { barChart, donutChart, lineChart, formatValue, escapeHtml } from './charts.js';
+import { barChart, columnChart, donutChart, lineChart, formatValue, escapeHtml } from './charts.js';
 
 const stream = document.getElementById('stream');
 const form = document.getElementById('ask-form');
@@ -32,10 +32,23 @@ const SUGGESTIONS = [
   'Break our orders down by sales channel',
 ];
 
+/** Offered once a report exists, because they only make sense against one. */
+const FOLLOW_UPS = [
+  'Show that as a table',
+  'Make it a column chart',
+  'Break that down by sales channel',
+];
+
 let inFlight = null;
 let lastReport = null;
 let lastQuestion = '';
 let startedAt = 0;
+
+// The last plan, kept so "convert this to a table" has something to refer to. It is sent back to
+// the server as a hint for the planner — and re-validated and re-authorized there like anything
+// else, so tampering with it buys nothing.
+let lastPlanJson = null;
+let previousQuestion = null;
 
 if (form) {
   form.addEventListener('submit', (event) => {
@@ -64,6 +77,7 @@ async function ask(question) {
   if (!question || inFlight) return;
 
   inFlight = new AbortController();
+  previousQuestion = lastQuestion || null;
   lastQuestion = question;
   lastReport = null;
   startedAt = performance.now();
@@ -81,7 +95,11 @@ async function ask(question) {
     const response = await fetch('/api/reports/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({
+        question,
+        previousQuestion,
+        previousPlan: lastPlanJson,
+      }),
       signal: inFlight.signal,
     });
 
@@ -140,6 +158,7 @@ function handle(name, payload) {
       addStep('thinking', null, payload.text);
       break;
     case 'spec':
+      lastPlanJson = JSON.stringify(payload);
       addChips(payload);
       break;
     case 'guard':
@@ -352,7 +371,8 @@ function addProvenanceLine(report) {
 }
 
 function addSuggestions() {
-  const options = SUGGESTIONS.filter((s) => s !== lastQuestion).slice(0, 2);
+  const pool = lastReport ? [...FOLLOW_UPS, ...SUGGESTIONS] : SUGGESTIONS;
+  const options = pool.filter((s) => s !== lastQuestion).slice(0, 3);
   if (!options.length) return;
 
   const li = document.createElement('li');
@@ -413,19 +433,38 @@ function renderReport(report) {
     canvas.appendChild(kpiRow(kpis, comparison?.kpis ?? [], comparedTo));
   }
 
+  // One card per chart, not per query. A query asking for three measures produces three charts,
+  // and stacking them inside one tall panel buries the later ones. Tiled, it reads as a report.
+  const grid = document.createElement('div');
+  grid.className = 'mt-6 grid gap-4 xl:grid-cols-2';
+
   for (const section of panels) {
-    if (!section.charts.length && !section.table.rows.length) continue;
-    if (!section.charts.length && section.kpis.length) continue;
-    canvas.appendChild(panel(section));
+    for (const series of section.charts) {
+      grid.appendChild(chartCard(series, section));
+    }
   }
+
+  if (grid.children.length) {
+    canvas.appendChild(grid);
+  }
+
+  canvas.appendChild(provenanceStrip(report.provenance));
 }
 
+
 function kpiRow(kpis, previous, comparedTo) {
-  // Outlines rather than a 1px gap over a coloured container: the gap trick turns any unused
-  // cell into a grey block, and how many cells are unused changes with the breakpoint.
+  // Columns match the number of tiles, so there is never an empty outlined cell. Written as
+  // literal class strings because Tailwind generates by scanning source text.
+  const COLUMNS = {
+    1: 'grid-cols-1',
+    2: 'sm:grid-cols-2',
+    3: 'sm:grid-cols-2 xl:grid-cols-3',
+    4: 'sm:grid-cols-2 xl:grid-cols-4',
+  };
+
   const row = document.createElement('div');
   row.className = 'grid overflow-hidden rounded-xl bg-surface outline outline-1 outline-rule '
-    + 'sm:grid-cols-2 xl:grid-cols-4';
+    + (COLUMNS[Math.min(kpis.length, 4)] ?? COLUMNS[4]);
 
   for (const kpi of kpis) {
     const before = previous.find((p) => p.key === kpi.key)?.value ?? null;
@@ -470,55 +509,108 @@ function deltaNote(kpi, before, comparedTo) {
   return `<p class="mt-2 text-[13px] font-medium ${tone}">${arrow} ${magnitude} vs ${escapeHtml(comparedTo)}</p>`;
 }
 
-function panel(section) {
-  const wrap = document.createElement('section');
-  wrap.className = 'mt-6 rounded-xl border border-rule bg-surface p-4 sm:p-5';
+/**
+ * Wide shapes take the full width; compact ones tile two across. A twelve-month line squeezed
+ * into half a column is unreadable, and a four-slice ring does not need the whole page.
+ */
+function isWide(series, section) {
+  return series.chart === 'line'
+    || series.chart === 'area'
+    || series.chart === 'table'
+    || section.table.rows.length > 8;
+}
 
-  for (const series of section.charts) {
-    // "Orders shipped" twice on one page tells the reader nothing — the grouping is what
-    // separates the two panels, so it belongs in the heading.
-    const grouping = section.table.columns.find((c) => !c.isMetric);
+function chartCard(series, section) {
+  const card = document.createElement('section');
+  card.className = 'rounded-xl border border-rule bg-surface p-4 sm:p-5'
+    + (isWide(series, section) ? ' xl:col-span-2' : '');
 
-    const heading = document.createElement('div');
-    heading.className = 'mb-4 flex flex-wrap items-baseline gap-x-2 gap-y-1';
-    heading.innerHTML =
-      `<h2 class="font-semibold">${escapeHtml(series.label)}</h2>`
-      + (grouping ? `<span class="text-[14px] text-ink-faint">by ${escapeHtml(grouping.label.toLowerCase())}</span>` : '');
-    wrap.appendChild(heading);
+  const grouping = section.table.columns.find((c) => !c.isMetric);
 
-    const chart = buildChart(series, section);
-    if (chart) wrap.appendChild(chart);
+  const heading = document.createElement('div');
+  heading.className = 'mb-4 flex flex-wrap items-baseline gap-x-2 gap-y-1';
+  heading.innerHTML =
+    `<h2 class="font-semibold">${escapeHtml(series.label)}</h2>`
+    + (grouping ? `<span class="text-[14px] text-ink-faint">by ${escapeHtml(grouping.label.toLowerCase())}</span>` : '');
+  card.appendChild(heading);
 
-    // Said out loud when a requested shape was replaced. Quietly drawing something else would
-    // leave the reader thinking the system ignored them.
-    if (series.chartNote) {
-      const note = document.createElement('p');
-      note.className = 'mt-3 text-[13px] leading-6 text-ink-faint';
-      note.textContent = series.chartNote;
-      wrap.appendChild(note);
-    }
+  const chart = buildChart(series, section);
+  if (chart) card.appendChild(chart);
+
+  // Said out loud when a requested shape was replaced. Quietly drawing something else would
+  // leave the reader thinking the system ignored them.
+  if (series.chartNote) {
+    const note = document.createElement('p');
+    note.className = 'mt-3 text-[13px] leading-6 text-ink-faint';
+    note.textContent = series.chartNote;
+    card.appendChild(note);
   }
-
-  const wantsTable = section.charts.some((c) => c.chart === 'table') || section.charts.length === 0;
 
   const details = document.createElement('details');
   details.className = 'mt-5 border-t border-rule pt-3';
   details.innerHTML = '<summary class="label-mono cursor-pointer hover:text-ink">Show the data</summary>';
-  if (wantsTable) details.open = true;
-  details.appendChild(dataTable(section.table));
-  wrap.appendChild(details);
+  if (series.chart === 'table') details.open = true;
+  details.appendChild(dataTable(seriesTable(series, section)));
+  card.appendChild(details);
 
-  return wrap;
+  return card;
 }
 
 /**
- * The form was already decided on the server, where the request was checked against the data —
- * so this only has to draw it. A `table` panel draws nothing; the figures below it are the panel.
+ * The figures behind one card.
+ *
+ * A query with three measures produces one table holding all three. Each card shows only its
+ * own, so the numbers under a chart are the numbers in it.
  */
+function seriesTable(series, section) {
+  const keep = section.table.columns
+    .map((column, index) => ({ column, index }))
+    .filter(({ column }) => !column.isMetric || column.key === series.key);
+
+  return {
+    columns: keep.map((k) => k.column),
+    rows: section.table.rows.map((row) => keep.map((k) => row[k.index])),
+  };
+}
+
+/** What was read, and what was held back. Shown under every report rather than on request. */
+function provenanceStrip(prov) {
+  const strip = document.createElement('div');
+  strip.className = 'mt-6 rounded-xl border border-rule bg-paper p-4 text-[13px] leading-6 text-ink-soft';
+
+  const chip = (text, danger) =>
+    `<code class="rounded border px-1.5 py-0.5 font-mono text-[12px] ${danger
+      ? 'border-danger bg-danger-wash text-danger' : 'border-rule bg-surface'}">${escapeHtml(text)}</code>`;
+
+  const read = document.createElement('p');
+  read.innerHTML = `<span class="label-mono">Read</span> ${prov.tablesRead.map((t) => chip(t, false)).join(' ')}`;
+  strip.appendChild(read);
+
+  if (prov.withheld.length) {
+    const withheld = document.createElement('p');
+    withheld.className = 'mt-2';
+    withheld.innerHTML = `<span class="label-mono">Withheld</span> ${prov.withheld.map((w) => chip(w, true)).join(' ')}`;
+    strip.appendChild(withheld);
+  }
+
+  if (prov.rowLimitReached) {
+    const capped = document.createElement('p');
+    capped.className = 'mt-2 text-warn';
+    capped.textContent = 'Row limit reached — this is not the whole set.';
+    strip.appendChild(capped);
+  }
+
+  return strip;
+}
+
 function buildChart(series, section) {
   switch (series.chart) {
     case 'line':
       return lineChart(splitByYear(series), series.unit);
+    case 'area':
+      return lineChart(splitByYear(series), series.unit, { filled: true });
+    case 'column':
+      return columnChart(series);
     case 'donut':
       return donutChart(series, { totalLabel: section.model === 'shipping' ? 'orders' : 'total' });
     case 'table':

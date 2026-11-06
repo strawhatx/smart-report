@@ -6,11 +6,17 @@ public enum ChartKind
     /// <summary>Let the data decide. The default, and right most of the time.</summary>
     Auto,
 
-    /// <summary>Ranked bars on a shared baseline. Valid for anything categorical.</summary>
+    /// <summary>Ranked horizontal bars on a shared baseline. Valid for anything categorical.</summary>
     Bar,
+
+    /// <summary>Vertical bars. The same comparison as <see cref="Bar"/>, read left to right.</summary>
+    Column,
 
     /// <summary>A line over an ordered axis. Only meaningful when the grouping is time.</summary>
     Line,
+
+    /// <summary>A line with the area beneath it washed in. Time only, and one series at a time.</summary>
+    Area,
 
     /// <summary>One whole split into a few parts, with the total in the middle.</summary>
     Donut,
@@ -63,6 +69,15 @@ public static class ChartChoice
             ChartKind.Line => new Resolution(ChartKind.Bar,
                 "Asked for a line, shown as bars: these groups have no order, so a line would "
                 + "suggest a trend between them that does not exist."),
+
+            ChartKind.Area when isTemporal => new Resolution(ChartKind.Area, null),
+            ChartKind.Area => new Resolution(ChartKind.Bar,
+                "Asked for an area chart, shown as bars: the area under a line only means "
+                + "something when the axis is ordered."),
+
+            // Vertical rather than horizontal is a presentation preference, not a claim about
+            // the data, so it is always honoured.
+            ChartKind.Column => new Resolution(ChartKind.Column, null),
 
             ChartKind.Donut when points <= MaxDonutSegments => new Resolution(ChartKind.Donut, null),
             ChartKind.Donut => new Resolution(ChartKind.Bar,
