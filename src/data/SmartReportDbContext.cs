@@ -4,6 +4,16 @@ using SmartReport.Data.Entities;
 
 namespace SmartReport.Data;
 
+/// <summary>
+/// The schema, and nothing else.
+///
+/// <para>
+/// EF owns the physical shape — tables, columns, indexes, migrations — and is used for the
+/// seeder. It is <b>not</b> used to answer reports: those go through <c>SqlCompiler</c> and
+/// parameterized SQL on the application connection, so that every read passes the row-level
+/// security policies rather than whatever EF would have generated.
+/// </para>
+/// </summary>
 public sealed class SmartReportDbContext(DbContextOptions<SmartReportDbContext> options)
     : DbContext(options)
 {
@@ -34,6 +44,10 @@ public sealed class SmartReportDbContext(DbContextOptions<SmartReportDbContext> 
             }
         }
 
+        // Ids are assigned by the seeder rather than by identity columns, throughout. The
+        // application has SELECT only on these tables and never inserts, so an identity sequence
+        // would be ceremony — and fixed ids let COPY write hundreds of thousands of rows without
+        // a round trip per row to find out what the database called them.
         modelBuilder.Entity<Client>(b =>
         {
             b.Property(c => c.Id).ValueGeneratedNever();
@@ -50,6 +64,8 @@ public sealed class SmartReportDbContext(DbContextOptions<SmartReportDbContext> 
             b.Property(u => u.Role).HasMaxLength(40).IsRequired();
             b.Property(u => u.JobTitle).HasMaxLength(80).IsRequired();
             b.Property(u => u.PrincipalKey).HasMaxLength(40);
+            // Unique because it is how a session resolves to a person: two rows sharing a key
+            // would make "who is asking" ambiguous, which is not a question to leave open.
             b.HasIndex(u => u.PrincipalKey).IsUnique();
             b.HasIndex(u => u.ClientId);
         });
@@ -67,6 +83,8 @@ public sealed class SmartReportDbContext(DbContextOptions<SmartReportDbContext> 
             b.Property(o => o.Id).ValueGeneratedNever();
             b.Property(o => o.Channel).HasMaxLength(40).IsRequired();
             b.Property(o => o.Status).HasMaxLength(30).IsRequired();
+            // Every policy filters on client_id and most reports filter on a date, so the
+            // composite is the shape nearly every query wants.
             b.HasIndex(o => new { o.ClientId, o.OrderedAt });
         });
 
@@ -138,6 +156,16 @@ public sealed class SmartReportDbContext(DbContextOptions<SmartReportDbContext> 
         });
     }
 
+    /// <summary>
+    /// PascalCase to snake_case, applied to every table and column above.
+    ///
+    /// <para>
+    /// Done once here rather than with an attribute per property, because the catalog's SQL
+    /// expressions are hand-written against the physical names (<c>s.shipped_at</c>,
+    /// <c>o.client_id</c>). A per-property mapping that someone forgot would not fail the build
+    /// — it would fail at runtime, inside a query nobody reads until it breaks.
+    /// </para>
+    /// </summary>
     private static string ToSnakeCase(string name)
     {
         var sb = new StringBuilder(name.Length + 8);

@@ -29,6 +29,8 @@ public sealed class ScriptedReportPlanner : IReportPlanner
     private const string MonthStart = "2026-10-01";
     private const string MonthEnd = "2026-11-01";
 
+    /// <param name="AllOf">Every word must appear. Empty means the rule does not require any.</param>
+    /// <param name="AnyOf">At least one must appear, unless empty.</param>
     private sealed record Rule(string[] AllOf, string[] AnyOf, string Title, string[] Narration, Func<SpecQuery[]> Build);
 
     private const string PriorMonthStart = "2026-09-01";
@@ -40,6 +42,11 @@ public sealed class ScriptedReportPlanner : IReportPlanner
     private static SpecFilter September(string field) =>
         new(field, FilterOp.Between, [PriorMonthStart, PriorMonthEnd]);
 
+    /// <summary>
+    /// Matched in order, first win. Specific rules come before general ones — the benchmark and
+    /// the restricted models are first, so that "how do we compare" is not swallowed by a
+    /// looser shipping rule further down.
+    /// </summary>
     private static readonly Rule[] Rules =
     [
         // ── The benchmark. The question a client really asks, and the one a naive text-to-SQL
@@ -240,6 +247,11 @@ public sealed class ScriptedReportPlanner : IReportPlanner
         return null;
     }
 
+    /// <summary>
+    /// Substring matching on the lower-cased question — deliberately crude. This planner exists
+    /// so the demo runs with no key, not to understand language; anything it does not recognise
+    /// becomes an honest "I can't answer that", which is the correct outcome for a lookup table.
+    /// </summary>
     private static bool Matches(Rule rule, string question) =>
         rule.AllOf.All(question.Contains)
         && (rule.AnyOf.Length == 0 || rule.AnyOf.Any(question.Contains));

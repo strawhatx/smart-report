@@ -16,6 +16,9 @@ using SmartReport.Core.Sql;
 using SmartReport.Core.Specs;
 using SmartReport.Data;
 
+// Both locations, because the working directory differs by how the app was started: the project
+// folder under `dotnet run` and F5, the repository root under `dotnet run --project src/app`.
+// Existing environment variables always win, so this can never override real configuration.
 DotEnv.LoadIfPresent(Directory.GetCurrentDirectory());
 DotEnv.LoadIfPresent(Path.Combine(Directory.GetCurrentDirectory(), "..", ".."));
 
@@ -34,12 +37,16 @@ builder.Services.AddRazorPages();
 builder.Services.AddHttpContextAccessor();
 
 // --- Core pipeline. Catalog is a singleton because it is immutable; the rest are cheap.
+// Singletons because every one of these is immutable and holds no per-request state. The
+// catalog in particular is read on every question; building it per request would be waste.
 builder.Services.AddSingleton(DataCatalog.CreateDefault());
 builder.Services.AddSingleton<SpecValidator>();
 builder.Services.AddSingleton<PolicyEngine>();
 builder.Services.AddSingleton<SqlCompiler>();
 
 // --- Data access as the non-owner application role (A6).
+// AppDatabase is a singleton — it holds a connection string, and Npgsql owns the pool behind it.
+// Everything that resolves a principal is scoped, so one request's identity can never outlive it.
 builder.Services.AddSingleton(new AppDatabase(appConnection));
 builder.Services.AddScoped<PrincipalDirectory>();
 builder.Services.AddScoped<SavedReportStore>();
@@ -80,6 +87,8 @@ builder.Services
         options.Cookie.Name = "smartreport.auth";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Lax;
+        // SameAsRequest rather than Always, so the cookie survives plain HTTP in development.
+        // Behind TLS in production the request is already HTTPS, so the cookie is marked Secure.
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
@@ -118,6 +127,9 @@ else
     app.UseHsts();
 }
 
+// Order matters. Headers go on before anything can short-circuit the pipeline, so a redirect or
+// a 404 carries them too; authentication precedes authorization; the rate limiter sits after
+// authentication so it can partition by the signed-in principal rather than by IP.
 app.UseHttpsRedirection();
 app.UseSmartReportSecurityHeaders();
 app.UseStaticFiles();

@@ -45,16 +45,22 @@ public sealed class ReportPipeline(
                     break;
 
                 case PlannerEvent.NoMatch noMatch:
+                    // Nothing in the catalog fits. A first-class outcome, not a failure — the
+                    // honest answer to a question the product cannot yet answer.
                     yield return new ReportEvent.Refused(noMatch.Message);
                     yield return new ReportEvent.Done();
                     yield break;
 
                 case PlannerEvent.Planned result:
+                    // Held rather than acted on: the planner may still emit narration after it,
+                    // and nothing happens to the plan until the stream is exhausted.
                     planned = result.Spec;
                     break;
             }
         }
 
+        // Neither a plan nor a refusal. A provider returning something unusable, which is a
+        // fault rather than an answer — reported as Failed so it is not mistaken for a decision.
         if (planned is null)
         {
             yield return new ReportEvent.Failed("The planner didn't produce a plan.");
@@ -107,8 +113,13 @@ public sealed class ReportPipeline(
 
         yield return new ReportEvent.Planned(validated.Spec!);
 
+        // Authorization happens before a single query is compiled, so a measure this person may
+        // not use never becomes SQL at all — the difference between "returned no rows" and
+        // "was never asked".
         var governed = policy.Govern(validated.Spec!, principal);
 
+        // Every decision, including the allowed ones. The UI chooses what to show; the stream
+        // carries the whole record so it can be read in full.
         foreach (var decision in governed.Decisions)
         {
             yield return new ReportEvent.Guard(decision);
@@ -124,9 +135,15 @@ public sealed class ReportPipeline(
 
         var executed = new List<(CompiledQuery, QueryResult)>();
 
+        // Compiled and run one at a time, in order, so the rail fills as the work happens rather
+        // than after it. The order is also what ReportBuilder relies on to pair each result with
+        // the governed query it came from.
         foreach (var query in governed.Queries)
         {
             var compiled = compiler.Compile(query);
+
+            // Shown before it runs. The query is inspectable by design — the whole claim is that
+            // nothing in it came from the question.
             yield return new ReportEvent.Sql(compiled.Model, compiled.Sql);
 
             QueryResult? result = null;
@@ -145,6 +162,8 @@ public sealed class ReportPipeline(
                 failure = "The query couldn't be run. Nothing was changed.";
             }
 
+            // Stop at the first failure rather than running the rest: a partial report whose
+            // missing panel is unexplained is worse than a clear error.
             if (failure is not null)
             {
                 break;

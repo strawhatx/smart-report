@@ -122,6 +122,14 @@ async function ask(question) {
   }
 }
 
+/**
+ * Parses the `event:` / `data:` framing out of the byte stream.
+ *
+ * A network chunk does not line up with an SSE frame — one read can carry half a frame, or three
+ * of them — so bytes accumulate in a buffer and are consumed only at a blank-line boundary. The
+ * decoder is kept in streaming mode for the same reason: a multi-byte character can straddle two
+ * chunks, and decoding each chunk independently would corrupt it.
+ */
 async function readStream(body) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -150,8 +158,14 @@ async function readStream(body) {
   }
 }
 
+/** Counted here rather than taken from the report, so the rail reports what actually ran. */
 const queriesRan = { count: 0 };
 
+/**
+ * One case per server event. The order they arrive in is the order the pipeline decided things,
+ * which is why the rail reads as a sequence rather than a summary: narration, then the plan,
+ * then each authorization decision, then the SQL, then the report.
+ */
 function handle(name, payload) {
   switch (name) {
     case 'thinking':
@@ -199,6 +213,7 @@ function handle(name, payload) {
 
 /* ─────────────────────────── conversation rail ─────────────────────────── */
 
+/** The question, as asked. Everything below it in the rail is the answer to this one. */
 function addBubble(question) {
   queriesRan.count = 0;
   const li = document.createElement('li');
@@ -207,6 +222,11 @@ function addBubble(question) {
   stream.appendChild(li);
 }
 
+/**
+ * Colour by outcome, not by severity. Green is a measure allowed, red refused, blue the client
+ * scope, amber a disclosure safeguard — each a different kind of decision, so they are not
+ * shades of one warning.
+ */
 const STEP_STYLES = {
   thinking: { dot: 'bg-ink-faint', text: 'text-ink-soft' },
   allowed: { dot: 'bg-good', text: 'text-ink-soft' },
@@ -215,6 +235,10 @@ const STEP_STYLES = {
   aggregated: { dot: 'bg-warn', text: 'text-ink-soft' },
 };
 
+/**
+ * One line in the transcript. Returns the element so a caller can hang richer content — the
+ * plan chips, the SQL disclosure — off the same row.
+ */
 function addStep(kind, subject, text, remedy) {
   const style = STEP_STYLES[kind] ?? STEP_STYLES.thinking;
 
@@ -358,6 +382,10 @@ function addFindings(items, disclosure) {
   stream.scrollTo({ top: 0 });
 }
 
+/**
+ * The line a technical reviewer checks: how many queries ran, against which tables, whose data
+ * they touched, how long it took, and which engine planned it. Shown always, not on request.
+ */
 function addProvenanceLine(report) {
   const seconds = ((performance.now() - startedAt) / 1000).toFixed(1);
   const li = document.createElement('li');
@@ -485,6 +513,13 @@ function kpiRow(kpis, previous, comparedTo) {
   return row;
 }
 
+/**
+ * The change against the previous period.
+ *
+ * Direction and goodness are separate questions: late shipments falling is an improvement, and
+ * orders falling is not, so the arrow follows the number and the colour follows
+ * `LOWER_IS_BETTER`. Tying colour to direction would paint a drop in late shipments red.
+ */
 function deltaNote(kpi, before, comparedTo) {
   if (kpi.key === 'low_stock_products' && kpi.value > 0) {
     return '<p class="mt-2 text-[13px] font-medium text-warn">Reorder soon</p>';
@@ -646,6 +681,12 @@ function splitByYear(series) {
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const monthName = (mm) => MONTHS[Number(mm) - 1] ?? mm;
 
+/**
+ * The figures, always available under every chart.
+ *
+ * Built with createElement and textContent rather than innerHTML: these are database values, and
+ * a product name containing a bracket should render as a bracket, not as markup.
+ */
 function dataTable(table) {
   const wrap = document.createElement('div');
   wrap.className = 'mt-3 overflow-x-auto';
@@ -687,6 +728,10 @@ function dataTable(table) {
 
 /* ─────────────────────────── export and save ─────────────────────────── */
 
+/**
+ * Every panel's figures as CSV, built in the browser from the report already in hand — no second
+ * request, so the file cannot disagree with what is on screen.
+ */
 function exportCsv() {
   if (!lastReport) return;
 
@@ -708,6 +753,12 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Saves the question, not the figures.
+ *
+ * Reopening re-asks it, so a saved report is never a stale snapshot presented as current. The
+ * client and owner are not sent — the server takes them from the session (A4).
+ */
 async function saveReport() {
   if (!lastReport) return;
 
@@ -725,4 +776,5 @@ async function saveReport() {
   }
 }
 
+/** CSV quoting: every field quoted, embedded quotes doubled — the one escaping rule RFC 4180 has. */
 const quote = (value) => `"${String(value).replace(/"/g, '""')}"`;

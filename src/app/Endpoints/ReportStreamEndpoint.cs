@@ -43,8 +43,21 @@ public sealed class AskRequestValidator : AbstractValidator<AskRequest>
     }
 }
 
+/// <summary>
+/// The two endpoints the portal calls: ask a question, and save the answer.
+///
+/// <para>
+/// Asking streams rather than returning a document, because the interesting part is the order
+/// things happen in — the plan, then each authorization decision, then the SQL, then the rows.
+/// A single JSON response at the end would hide exactly what this product is trying to show.
+/// </para>
+/// </summary>
 public static class ReportStreamEndpoint
 {
+    /// <summary>
+    /// camelCase so the browser reads these as ordinary JavaScript, and enums as strings so the
+    /// client can switch on `'denied'` rather than on a number whose meaning lives in C#.
+    /// </summary>
     private static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -78,6 +91,10 @@ public static class ReportStreamEndpoint
 
                 var logger = loggerFactory.CreateLogger("ReportStream");
 
+                // no-store because the answer is one client's data (A10). X-Accel-Buffering
+                // tells a reverse proxy not to hold the response until it completes — without
+                // it, nginx buffers the whole stream and the events all arrive at once, which
+                // looks identical to the feature not working.
                 context.Response.Headers.CacheControl = "no-store";
                 context.Response.Headers["X-Accel-Buffering"] = "no";
                 context.Response.ContentType = "text/event-stream";
@@ -152,6 +169,9 @@ public static class ReportStreamEndpoint
 
         try
         {
+            // The SSE frame: an event name, a single data line, and a blank line to terminate.
+            // The payload is serialized compactly on purpose — a newline inside it would be read
+            // as the end of the frame.
             await context.Response.WriteAsync($"event: {@event.Name}\n", cancellationToken);
             await context.Response.WriteAsync(
                 $"data: {JsonSerializer.Serialize(payload, Json)}\n\n", cancellationToken);

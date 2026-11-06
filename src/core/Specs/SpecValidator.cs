@@ -16,10 +16,22 @@ namespace SmartReport.Core.Specs;
 /// </summary>
 public sealed class SpecValidator(DataCatalog catalog)
 {
+    // Which comparisons make sense for each kind of field. Text has no ordering, so `gte` on a
+    // carrier name is meaningless; a date has no substring, so `contains` on a timestamp is a
+    // category error rather than a filter. Rejecting these is not pedantry — the compiler would
+    // otherwise emit SQL that runs and returns something nobody asked for.
     private static readonly FilterOp[] TextOps = [FilterOp.Eq, FilterOp.In, FilterOp.Contains];
     private static readonly FilterOp[] NumberOps = [FilterOp.Eq, FilterOp.In, FilterOp.Gte, FilterOp.Lte, FilterOp.Between];
     private static readonly FilterOp[] DateOps = [FilterOp.Gte, FilterOp.Lte, FilterOp.Between, FilterOp.Eq];
 
+    /// <summary>
+    /// Checks a whole plan, collecting every problem rather than stopping at the first.
+    ///
+    /// <para>
+    /// All of them, because the list is handed back to the planner for a correction attempt —
+    /// reporting one error at a time would need one round trip per mistake.
+    /// </para>
+    /// </summary>
     public SpecValidationResult Validate(ReportSpec? spec)
     {
         var problems = new List<SpecProblem>();
@@ -151,6 +163,8 @@ public sealed class SpecValidator(DataCatalog catalog)
             }
         }
 
+        // Clamped, not rejected. A planner asking for a million rows has made a judgement error,
+        // not an attack, and the useful response is the largest answer the product will give.
         var limit = query.Limit is null
             ? SpecLimits.DefaultRowLimit
             : Math.Clamp(query.Limit.Value, 1, SpecLimits.MaxRowLimit);
@@ -217,6 +231,8 @@ public sealed class SpecValidator(DataCatalog catalog)
             return null;
         }
 
+        // How many values each operator needs. `in` takes any number within the cap, hence -1;
+        // `between` takes exactly two, and one value would silently become an open-ended range.
         var expectedValues = filter.Op switch
         {
             FilterOp.Between => 2,
@@ -253,6 +269,16 @@ public sealed class SpecValidator(DataCatalog catalog)
         return new SpecFilter(field.Key, filter.Op, filter.Values);
     }
 
+    /// <summary>
+    /// Whether a value is usable as the field's declared type.
+    ///
+    /// <para>
+    /// The parse is the check, and its result is thrown away — <see cref="Sql.SqlCompiler"/>
+    /// parses again when it binds. Done twice on purpose: validation must not hand the compiler
+    /// a converted value, because then the compiler would be trusting this method to have been
+    /// called. It converts from the raw string itself, so it is correct in isolation.
+    /// </para>
+    /// </summary>
     private static bool ValueParses(string value, FieldType type) => type switch
     {
         FieldType.Number => decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out _),
